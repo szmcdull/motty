@@ -526,6 +526,8 @@ type Messages struct {
 	ErrHostGroupInvalid         string
 	HostTagsCreatePrefix        string
 	FieldIcon                   string
+	FieldIconPlaceholder        string
+	IconsEmpty                  string
 	FieldColor                  string
 	FieldColorCustom            string
 	ColorPickerChoose           string
@@ -1136,6 +1138,7 @@ type Messages struct {
 	TerminalFindClose        string
 	TerminalFindNoMatches    string
 	TerminalFindCountFmt     string
+	FindSettings             TerminalFindSettingsMessages
 	TerminalFindTruncatedFmt string
 
 	// The connection page shown until a shell speaks: one row per stage, each
