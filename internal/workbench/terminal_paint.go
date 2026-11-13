@@ -87,7 +87,7 @@ func (state *State) paintTerminalPaneDetails(canvas *gfx.Canvas, session *Sessio
 }
 
 func (state *State) activeTerminalTools(session *Session, toolList *[maxBarTools]barTool) []barTool {
-	if session == nil || session.term == nil || state.paneIsInactive(session.ID) {
+	if session == nil || session.term == nil {
 		return nil
 	}
 	tools := toolList[:0]
@@ -96,7 +96,7 @@ func (state *State) activeTerminalTools(session *Session, toolList *[maxBarTools
 		notesStyle = iconButtonActive
 	}
 	tools = append(tools, barTool{id: hitNotesPanel, icon: iconNotebook, hint: state.noteText("Notes", "笔记"), style: notesStyle})
-	if session.host.isSSH() && !session.isLocal() {
+	if session.hasServer() {
 		tools = append(tools, barTool{id: hitSFTPDetach, icon: iconSFTPTransfer, hint: state.messages.SFTPWindow.Open, disabled: !session.hasServer() || session.phase != sshconn.PhaseConnected || !state.sftpManagersAvailable(), style: iconButtonQuiet})
 	}
 	filesStyle := iconButtonQuiet
@@ -383,7 +383,12 @@ func (state *State) declarePaneBar(c ui.C, width float32, title, status string, 
 		if active {
 			light = ui.Slot(c).Size(16, 16).Shrink(0).MarginSides(0, 7, 0, 0)
 		} else {
-			ui.Icon(c, lucideIcons[iconTerminal]).Size(14, 14).Color(pal.faint).MarginSides(0, 7, 0, 0)
+			// The idle marker keeps the light's 16 point box, so the name and the
+			// reading beside it do not move when the pane gains or loses the
+			// keyboard.
+			ui.Row(c).Size(16, 16).Shrink(0).MarginSides(0, 7, 0, 0).Center().Children(func() {
+				ui.Icon(c, lucideIcons[iconTerminal]).Size(14, 14).Color(pal.faint)
+			})
 		}
 		titleColor := pal.muted
 		if active {
@@ -405,8 +410,19 @@ func (state *State) declarePaneBar(c ui.C, width float32, title, status string, 
 			// Typing goes to this pane too: the one mark an inactive bar carries.
 			ui.Icon(c, lucideIcons[iconRadio]).Size(14, 14).Color(pal.accent).MarginSides(0, 0, 0, 8)
 		}
+		state.declarePaneBarClose(c, session)
 	})
 	return spinner, light
+}
+
+// declarePaneBarClose is the close control at a split pane's bar: every pane
+// carries one, whichever pane has the keyboard, so closing a pane never requires
+// finding it in the shared rail first. The control closes the pane its bar
+// belongs to, not whichever pane has the keyboard; a press on it is a hit of its
+// own, so it neither switches panes nor starts a pane drag.
+func (state *State) declarePaneBarClose(c ui.C, session *Session) {
+	state.declareIconButtonWithOptions(c, hitPaneBarCloseList.At(int(session.ID)), iconClose, state.messages.PaneClose, false, iconButtonQuiet, 14, gfx.HitOptions{}).
+		Size(barToolSize, barToolSize).MarginSides(0, 0, 0, 6)
 }
 
 // paintGrid draws a session's character grid: for each row its background

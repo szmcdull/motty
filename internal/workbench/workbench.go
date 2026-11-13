@@ -197,6 +197,9 @@ var (
 	hitForwardDialogDestinationPort = tree.ID(forwardsHits, "forward-dialog-destination-port")
 	hitForwardDialogResume          = tree.ID(forwardsHits, "forward-dialog-resume")
 	hitForwardDialogResumeHelp      = tree.ID(forwardsHits, "forward-dialog-resume-help")
+	hitForwardDialogViaShell        = tree.ID(forwardsHits, "forward-dialog-via-shell")
+	hitForwardDialogViaShellHelp    = tree.ID(forwardsHits, "forward-dialog-via-shell-help")
+	hitForwardDialogRelay           = tree.ID(forwardsHits, "forward-dialog-relay")
 	hitForwardHostDismiss           = tree.ID(forwardsHits, "forward-host-dismiss")
 	hitForwardHostTrigger           = tree.ID(forwardsHits, "forward-host-trigger")
 	hitForwardHostScroll            = tree.ID(forwardsHits, "forward-host-scroll")
@@ -208,6 +211,9 @@ var (
 
 // Settings: its explicit choices.
 var (
+	hitSettingsTextSizeDown    = tree.ID(settingsHits, "settings-text-size-down")
+	hitSettingsTextSizeReset   = tree.ID(settingsHits, "settings-text-size-reset")
+	hitSettingsTextSizeUp      = tree.ID(settingsHits, "settings-text-size-up")
 	hitSettingsFontSizeDown    = tree.ID(settingsHits, "settings-font-size-down")
 	hitSettingsFontSizeReset   = tree.ID(settingsHits, "settings-font-size-reset")
 	hitSettingsFontSizeUp      = tree.ID(settingsHits, "settings-font-size-up")
@@ -344,6 +350,7 @@ var (
 var (
 	hitPaneDividerList  = tree.Sub(shellHits, tree.Name("pane-divider"))
 	hitPaneActivateList = tree.Sub(shellHits, tree.Name("pane-activate"))
+	hitPaneBarCloseList = tree.Sub(shellHits, tree.Name("pane-bar-close"))
 )
 
 const ()
@@ -670,9 +677,10 @@ type State struct {
 	terminalScrollback int
 	terminalFindPrefs  terminalFindPreferences
 	findSettingsUI     terminalFindSettingsUI
-	// textScale is the interface text size the user chose: the scale the whole
-	// window's text is drawn at, apart from the terminal's own font size.
-	textScale           textScale
+	// interfaceTextSize is the body text size the user chose, in logical pixels:
+	// the size the whole window's text is drawn at, apart from the terminal's own
+	// font size.
+	interfaceTextSize   interfaceTextSize
 	terminalCursorStyle terminalCursorStyle
 	connectionReconnect reconnectPolicy
 	restoreConnect      restoreConnectPolicy
@@ -1387,6 +1395,9 @@ func (state *State) EditorFor(hit gfx.ID) *text.Editor {
 		if hit == hitForwardDialogLabel || hit == hitForwardDialogLocalPort || hit == hitForwardDialogDestination || hit == hitForwardDialogDestinationPort {
 			return state.forwardEditor.field(forwardDialogField(hit))
 		}
+		if hit == hitForwardDialogRelay && state.forwardEditor.viaShell {
+			return state.forwardEditor.field(forwardDialogField(hit))
+		}
 	case modalPassword:
 		if index, ok := hit.In(hitPasswordFields); ok && index >= 1 && index-1 < len(state.passwordFields) {
 			return &state.passwordFields[index-1]
@@ -1917,6 +1928,11 @@ func (state *State) click(id gfx.ID, feedback bool) {
 	case id.Scope() == hitCommandSessionList:
 		state.ActivatePane(uint32(item(id)))
 		state.save()
+	case id.Scope() == hitPaneBarCloseList:
+		// The bar names the pane it closes; pressing one does not move focus to
+		// it first, so closing the pane the user is not in leaves the keyboard
+		// where it was.
+		state.requestCloseSession(uint32(item(id)))
 	case id.Scope() == hitPaneActivateList:
 		index := item(id)
 		state.refreshWorkspaceViews()
@@ -2339,7 +2355,7 @@ func (state *State) connectParsed(parsed connection) {
 // how a window appears; when files are set to live in the session panel, the
 // link opens the session that owns one.
 func (state *State) openParsedHost(host Host, files bool) {
-	if files && host.isSSH() && state.sftpManagersAvailable() {
+	if files && host.isSSH() && !host.mosh() && state.sftpManagersAvailable() {
 		state.openHostSFTPWindow(host)
 		return
 	}

@@ -45,6 +45,10 @@ type Connection interface {
 	OpenSFTP() (sftpclient.Remote, error)
 	// DialContext opens a remote stream through the authenticated connection.
 	DialContext(context.Context, string, string) (net.Conn, error)
+	// DialShellContext runs a relay command in a shell on the server and returns
+	// its input and output as a remote stream, for a server that refuses
+	// forwarded channels.
+	DialShellContext(context.Context, string, string) (net.Conn, error)
 	// Listen asks the authenticated server to open a remote listener.
 	Listen(string, string) (net.Listener, error)
 	ListenContext(context.Context, string, string, func(net.Listener) error) (net.Listener, error)
@@ -612,6 +616,15 @@ func (state *State) startConnectionMode(session *Session, host Host, automatic b
 			session.desk = nil
 		}
 		session.conn = state.newDesktopConn(session, host)
+		state.finishStartingConnection(session, automatic)
+		return
+	}
+	if host.mosh() {
+		// An SSH host whose terminal runs over mosh: the SSH connection is the
+		// bootstrap, and the session has no SSH server once it is up.
+		config, _ := state.sshConfigFor(session, host)
+		session.sshOptions = host.SSHOptions.Clone()
+		session.conn = state.newMoshConn(session, host, config)
 		state.finishStartingConnection(session, automatic)
 		return
 	}

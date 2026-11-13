@@ -267,9 +267,6 @@ type Messages struct {
 	SettingsAppearanceLight                string
 	SettingsTextSize                       string
 	SettingsTextSizeDescription            string
-	SettingsTextSizeSmall                  string
-	SettingsTextSizeRegular                string
-	SettingsTextSizeLarge                  string
 	SettingsInterfaceFont                  string
 	SettingsInterfaceFontDefault           string
 	SettingsInterfaceFontUnsupportedFmt    string
@@ -927,6 +924,13 @@ type Messages struct {
 	ForwardFieldDestinationPort   string
 	ForwardFieldResume            string
 	ForwardResumeHelp             string
+	ForwardFieldViaShell          string
+	ForwardViaShellHelp           string
+	ForwardFieldRelay             string
+	ForwardRelayPlaceholder       string
+	ForwardRefusedHint            string
+	ForwardRelayRefused           string
+	ErrForwardRelayFmt            string
 	ForwardDestinationPlaceholder string
 	ForwardLocalDestinationHint   string
 	ForwardRemoteListenerFmt      string
