@@ -11,6 +11,7 @@ import (
 
 	"github.com/vivaui/viva/components"
 	"github.com/vivaui/viva/gfx"
+	"motty/internal/localshell"
 	"motty/internal/sftpclient"
 )
 
@@ -71,9 +72,17 @@ func localHome() string {
 }
 
 // localPanelStart is the folder a local terminal's panel opens in: the one its
-// shell last reported, if that is still a folder, else the home folder.
+// shell last reported, if that is still a folder, else the shell's own home
+// folder. A WSL shell's home is the distribution's root, not this computer's
+// home: the panel then shows the files the terminal is working on, and the
+// shell's reported folder takes over once it arrives.
 func (state *State) localPanelStart(session *Session) string {
 	home := localHome()
+	if distro := session.wslDistro(); distro != "" {
+		if root, ok := localshell.WSLWindowsPath("/", distro); ok {
+			home = root
+		}
+	}
 	t := session.term
 	if t == nil {
 		return home
@@ -322,9 +331,18 @@ func (state *State) applyLocalListing(view *sftpView, listing localListing, seq 
 	folder := &view.lfolder
 	place, restore := folder.acceptNavigation(listing.dir, listing.navigation)
 	folder.path = listing.dir
+	if view.detached != nil && listing.navigation.kind == sftpNavigationManual && !state.sftpPathInput {
+		// The accepted path replaces the editor with breadcrumbs; hand the
+		// keyboard to the control that takes its place.
+		if folder.pathEditing {
+			view.detached.pendingFocus = sftpWindowPathEdit[0]
+		}
+		folder.pathEditing = false
+	}
 	previousRows := folder.allRows
 	folder.allRows = listing.rows
 	state.loadAppIcons(view, previousRows, listing.rows)
+	state.loadTypeIcons(view, listing.rows)
 	folder.localCoverage = listing.coverage
 	folder.crumbs = prepareLocalCrumbs(folder.crumbs, listing.dir)
 	if view.detached != nil {

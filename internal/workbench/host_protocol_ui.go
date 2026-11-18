@@ -30,6 +30,8 @@ var (
 	hitDialogAgentForward         = tree.ID(hostProtocolUiHits, "dialog-agent-forward")
 	hitDialogInteractiveOnly      = tree.ID(hostProtocolUiHits, "dialog-interactive-only")
 	hitDialogNoHistory            = tree.ID(hostProtocolUiHits, "dialog-no-history")
+	hitDialogIdentitiesOnly       = tree.ID(hostProtocolUiHits, "dialog-identities-only")
+	hitDialogIdentitiesOnlyHelp   = tree.ID(hostProtocolUiHits, "dialog-identities-only-help")
 	hitDialogAgentAccess          = tree.ID(hostProtocolUiHits, "dialog-agent-access")
 	hitDialogAgentAccessHelp      = tree.ID(hostProtocolUiHits, "dialog-agent-access-help")
 	hitDialogOTP                  = tree.ID(hostProtocolUiHits, "dialog-otp")
@@ -237,7 +239,7 @@ func (state *State) declareHostEndpointSlots(c ui.C, parent ui.Box, rowHeight fl
 				slots.authentication = ui.Slot(c).Grow(1)
 				if editor.auth == authPrivateKey {
 					slots.identity = ui.Slot(c).Grow(1)
-				} else if editor.auth != authAgent {
+				} else if editor.auth.usesPassword() {
 					slots.password = ui.Slot(c).Grow(1)
 				}
 			})
@@ -300,34 +302,34 @@ func (state *State) paintHostEndpointRows(canvas *gfx.Canvas) {
 		state.paintDialogField(canvas, hitDialogPort, fieldPort, m.FieldPort, "", third.Rect())
 	case protocolRDP:
 		state.paintDialogField(canvas, hitDialogAddress, fieldAddress, m.FieldAddress, m.FieldAddressPlaceholder, address.Rect())
-		state.paintDialogField(canvas, hitDialogUser, fieldUser, state.messages.Desktop.FieldRDPUser, state.messages.Desktop.RDPUserHint, second.Rect())
+		state.paintDialogField(canvas, hitDialogUser, fieldUser, state.messages.Desktop.FieldRDPUser, state.hostUserHint(state.messages.Desktop.RDPUserHint), second.Rect())
 		state.paintSecureDialogField(canvas, hitDialogPassword, fieldPassword, m.FieldPassword, state.hostPasswordHint(), password.Rect())
 		state.paintDialogField(canvas, hitDialogPort, fieldPort, m.FieldPort, "", third.Rect())
 	case protocolVNC:
 		state.paintDialogField(canvas, hitDialogAddress, fieldAddress, m.FieldAddress, m.FieldAddressPlaceholder, address.Rect())
 		if editor.viaSSH {
-			state.paintDialogField(canvas, hitDialogUser, fieldUser, state.messages.Desktop.FieldSSHUser, m.FieldUserPlaceholder, second.Rect())
+			state.paintDialogField(canvas, hitDialogUser, fieldUser, state.messages.Desktop.FieldSSHUser, state.hostUserHint(m.FieldUserPlaceholder), second.Rect())
 		} else {
-			state.paintDialogField(canvas, hitDialogUser, fieldUser, state.messages.Desktop.FieldVNCUser, state.messages.Desktop.VNCUserHint, second.Rect())
+			state.paintDialogField(canvas, hitDialogUser, fieldUser, state.messages.Desktop.FieldVNCUser, state.hostUserHint(state.messages.Desktop.VNCUserHint), second.Rect())
 		}
 		state.paintSecureDialogField(canvas, hitDialogPassword, fieldPassword, m.FieldVNCPassword, state.hostPasswordHint(), password.Rect())
 		state.paintDialogField(canvas, hitDialogPort, fieldPort, m.FieldPort, "", third.Rect())
 	case protocolSSH:
 		state.paintDialogField(canvas, hitDialogAddress, fieldAddress, m.FieldAddress, m.FieldAddressPlaceholder, address.Rect())
-		state.paintDialogField(canvas, hitDialogUser, fieldUser, m.FieldUser, m.FieldUserPlaceholder, second.Rect())
+		state.paintDialogField(canvas, hitDialogUser, fieldUser, m.FieldUser, state.hostUserHint(m.FieldUserPlaceholder), second.Rect())
 		state.paintHostAuthenticationChoice(canvas, authentication.Rect())
 		if editor.auth == authPrivateKey {
 			state.paintHostIdentityChoice(canvas, identity.Rect())
 			if state.hostAsksKeyPassphrase() {
 				state.paintSecureDialogField(canvas, hitDialogPassphrase, fieldPassphrase, m.KeyPassphraseLabel, state.hostPassphraseHint(), passphrase.Rect())
 			}
-		} else if editor.auth != authAgent {
+		} else if editor.auth.usesPassword() {
 			state.paintSecureDialogField(canvas, hitDialogPassword, fieldPassword, m.FieldPassword, state.hostPasswordHint(), password.Rect())
 		}
 		state.paintDialogField(canvas, hitDialogPort, fieldPort, m.FieldPort, "", third.Rect())
 	default:
 		state.paintDialogField(canvas, hitDialogAddress, fieldAddress, m.FieldAddress, m.FieldAddressPlaceholder, address.Rect())
-		state.paintDialogField(canvas, hitDialogUser, fieldUser, m.FieldUser, m.FieldUserPlaceholder, second.Rect())
+		state.paintDialogField(canvas, hitDialogUser, fieldUser, m.FieldUser, state.hostUserHint(m.FieldUserPlaceholder), second.Rect())
 		state.paintSecureDialogField(canvas, hitDialogPassword, fieldPassword, m.FieldPassword, state.hostPasswordHint(), password.Rect())
 		state.paintDialogField(canvas, hitDialogPort, fieldPort, m.FieldPort, "", third.Rect())
 	}
@@ -387,7 +389,11 @@ func (state *State) clickHostProtocol(id gfx.ID) bool {
 	editor := &state.editor
 	switch {
 	case id == hitDialogViaSSH:
-		editor.viaSSH = !editor.viaSSH
+		// A route owns the connection of a host that has one; the same-machine
+		// tunnel cannot also apply.
+		if !state.desktopRouteConfigured() {
+			editor.viaSSH = !editor.viaSSH
+		}
 	case id == hitDialogClipboard:
 		editor.clipboard = !editor.clipboard
 	case id == hitDialogChromeless:
@@ -404,10 +410,13 @@ func (state *State) clickHostProtocol(id gfx.ID) bool {
 		editor.agentForward = !editor.agentForward
 	case id == hitDialogInteractiveOnly:
 		editor.interactiveOnly = !editor.interactiveOnly
+	case id == hitDialogIdentitiesOnly:
+		editor.identitiesOnly = !editor.identitiesOnly
 	case id == hitDialogNoHistory:
 		editor.noHistory = !editor.noHistory
 	case id == hitDialogAgentAccess:
 		editor.agentAccess = !editor.agentAccess
+		editor.agentAccessChanged = true
 	case state.clickHostAuthentication(id):
 	case state.clickHostCredential(id):
 	case state.clickHostColor(id):
@@ -422,6 +431,7 @@ func (state *State) clickHostProtocol(id gfx.ID) bool {
 	case id == hitDialogPortsTrigger:
 		editor.ports = serial.Ports()
 		editor.portsOpen = !editor.portsOpen
+	case state.clickHostIdleKeepAlive(id):
 	case id == hitDialogPortsDismiss:
 		editor.portsOpen = false
 	case id.Scope() == hitDialogPortsItemList:
@@ -472,7 +482,7 @@ func (state *State) hostAsksKeyPassphrase() bool {
 		return false
 	}
 	identity, ok := state.identityForFingerprint(editor.identity)
-	return ok && identity.Encrypted
+	return ok && identity.Encrypted && !identity.SecurityKey
 }
 
 func (state *State) hostPassphraseHint() string {
@@ -491,13 +501,16 @@ func (state *State) hostFormHeight() float32 {
 		height += hostFormRowHeight
 	}
 	if state.editor.protocol == protocolSSH {
-		// The jump route row sits under the proxy row, and the terminal
-		// transport choice (with its hint when mosh is chosen) under the
-		// protocol choice.
-		height += hostFormRowHeight
+		// The terminal transport choice (with its hint when mosh is chosen)
+		// sits under the protocol choice.
 		if state.editor.terminal == terminalMosh {
 			height += 36
 		}
+	}
+	if state.editor.protocol == protocolSSH || state.editor.protocol == protocolVNC || state.editor.protocol == protocolRDP {
+		// The jump route row sits under the proxy row: SSH hosts and remote
+		// desktops are both reached through one.
+		height += hostFormRowHeight
 	}
 	if state.dialogError != "" {
 		height += 32
@@ -520,10 +533,20 @@ const (
 	otpFieldHeight = 58
 	// groupHeadingHeight is a rule and the small heading under it.
 	groupHeadingHeight = 40
-	// sshSwitchRowsHeight is both groups: the first row sits 4px under its
-	// heading, the others 12px under the row above, and 16px are left at the end.
-	sshSwitchRowsHeight = groupHeadingHeight + (4 + 20) + 3*(12+20) + groupHeadingHeight + (4 + 20) + 16
 )
+
+// sshSwitchRowsHeight is the room of the Advanced section's two switch groups:
+// the session switches and the AI-agent switch. The first row sits 4px under its
+// heading, the others 12px under the row above, and 16px are left at the end.
+// Automatic authentication brings one session switch more: the agent-identity
+// restriction.
+func (state *State) sshSwitchRowsHeight() float32 {
+	height := float32(groupHeadingHeight + (4 + 20) + 3*(12+20) + groupHeadingHeight + (4 + 20) + 16)
+	if state.editor.auth == authAutomatic {
+		height += 12 + 20
+	}
+	return height
+}
 
 // advancedHeaderHeight is the row that opens the Advanced section of an SSH
 // host, with the gap above it.
@@ -533,18 +556,47 @@ const advancedHeaderHeight = 48
 // it: 8px each, around its 32px.
 const advancedHeaderGap = 8
 
-// advancedSectionHeight is the room of an SSH host's Advanced section: its row
-// alone while closed, and open the algorithm choice (a third row for a custom
-// list), the one-time code secret with its buttons, and the switches.
-func (state *State) advancedSectionHeight() float32 {
-	if !state.editor.advancedOpen {
-		return advancedHeaderHeight
+// sshAdvancedRowsHeight is the room of the SSH-only part of an open Advanced
+// section: the algorithm choice (a third row for a custom list), the one-time
+// code secret with its buttons, and the switches.
+func (state *State) sshAdvancedRowsHeight() float32 {
+	if state.editor.protocol != protocolSSH {
+		return 0
 	}
 	rows := float32(1)
 	if state.editor.algoMode == algoCustom {
 		rows++
 	}
-	return advancedHeaderHeight + rows*hostFormRowHeight + hostFormRowHeight + otpFieldHeight + otpButtonsRow + sshSwitchRowsHeight
+	return rows*hostFormRowHeight + hostFormRowHeight + otpFieldHeight + otpButtonsRow + state.sshSwitchRowsHeight()
+}
+
+// idleAdvancedRowsHeight is the room of the idle keepalive rows: a heading, the
+// interval, the custom interval and unit when chosen, and the send content with
+// its custom field when the probe is on.
+func (state *State) idleAdvancedRowsHeight() float32 {
+	if !idleKeepAliveProtocol(state.editor.protocol) {
+		return 0
+	}
+	height := float32(groupHeadingHeight + hostFormRowHeight)
+	if state.editor.idleKeepAlive == idleKeepAliveCustom {
+		height += hostFormRowHeight
+	}
+	if state.editor.idleKeepAlive != idleKeepAliveOff {
+		height += hostFormRowHeight
+		if state.editor.idleInputValue() == idleInputCustom {
+			height += hostFormRowHeight
+		}
+	}
+	return height + 16
+}
+
+// advancedSectionHeight is the room of a terminal host's Advanced section: its
+// row alone while closed, and open the protocol's rows plus the idle keepalive.
+func (state *State) advancedSectionHeight() float32 {
+	if !state.editor.advancedOpen {
+		return advancedHeaderHeight
+	}
+	return advancedHeaderHeight + state.sshAdvancedRowsHeight() + state.idleAdvancedRowsHeight()
 }
 
 // hostDialogExtra is the height the protocol-specific rows add to the host dialog.
@@ -552,7 +604,7 @@ func (state *State) hostDialogExtra() float32 {
 	if state.editor.protocol == protocolVNC || state.editor.protocol == protocolRDP {
 		return state.desktopRowsHeight()
 	}
-	if state.editor.protocol != protocolSSH {
+	if !idleKeepAliveProtocol(state.editor.protocol) {
 		return 0
 	}
 	return state.advancedSectionHeight()
@@ -591,7 +643,12 @@ func (state *State) paintAdvancedSection(canvas *gfx.Canvas) {
 	}
 	paintIcon(canvas, uint8(chevron), icon.Rect(), pal.muted)
 	if open {
-		state.paintAlgorithmRows(canvas)
+		if state.editor.form.layoutProtocol == protocolSSH {
+			state.paintAlgorithmRows(canvas)
+		}
+		if idleKeepAliveProtocol(state.editor.form.layoutProtocol) {
+			state.paintHostIdleKeepAliveRows(canvas)
+		}
 	}
 }
 
@@ -611,6 +668,7 @@ type hostVNCRowsBody struct {
 type hostAlgoRowsBody struct {
 	algo, custom, login, otp, scan, paste, remove ui.Box
 	x11, agentFwd, noHistory, interactive         ui.Box
+	identitiesOnly, identitiesOnlyHelp            ui.Box
 	agentAccess, agentHelp                        ui.Box
 }
 
@@ -638,6 +696,10 @@ func (state *State) paintAlgorithmRows(canvas *gfx.Canvas) {
 	state.paintDialogCheckbox(canvas, hitDialogAgentForward, m.AgentForward, editor.agentForward, b.agentFwd)
 	state.paintDialogCheckbox(canvas, hitDialogNoHistory, state.messages.History.HostNoRecord, editor.noHistory, b.noHistory)
 	state.paintDialogCheckbox(canvas, hitDialogInteractiveOnly, m.InteractiveOnly, editor.interactiveOnly, b.interactive)
+	if editor.auth == authAutomatic {
+		state.paintDialogCheckbox(canvas, hitDialogIdentitiesOnly, m.IdentitiesOnly, editor.identitiesOnly, b.identitiesOnly)
+		state.paintHelpIcon(canvas, hitDialogIdentitiesOnlyHelp, m.IdentitiesOnlyNote, b.identitiesOnlyHelp.Rect())
+	}
 	state.paintDialogCheckbox(canvas, hitDialogAgentAccess, m.AgentAccess, editor.agentAccess, b.agentAccess)
 	// After the checkbox, whose words reach to the end of the row, so that this is
 	// the hit on top where the two meet.
@@ -677,8 +739,12 @@ func (state *State) declareHostAlgoRows(c ui.C) {
 		b.agentFwd = state.declareDialogCheckboxC(c, m.AgentForward, 12, 0)
 		b.noHistory = state.declareDialogCheckboxC(c, state.messages.History.HostNoRecord, 12, 0)
 		b.interactive = state.declareDialogCheckboxC(c, m.InteractiveOnly, 12, 0)
+		if editor.auth == authAutomatic {
+			b.identitiesOnly, b.identitiesOnlyHelp = state.declareDialogCheckboxHelpC(c, m.IdentitiesOnly, 12, 0)
+		}
 		heading(m.AdvancedAgents)
 		b.agentAccess, b.agentHelp = state.declareDialogCheckboxHelpC(c, m.AgentAccess, 4, 0)
+		state.declareHostIdleKeepAliveRows(c)
 	})
 }
 
@@ -728,11 +794,19 @@ func (state *State) desktopRowsHeight() float32 {
 // paintVNCRows paints the switches of a VNC or RDP host in the slots the host
 // form's page laid out: connecting through SSH, sharing the clipboard, showing
 // the picture without the bars around it and, for RDP, asking Windows for its
-// console (administrative) session and choosing Standard RDP Security.
+// console (administrative) session and choosing Standard RDP Security. A host
+// whose route carries the connection cannot also use the same-machine tunnel,
+// so that switch is dimmed and inert.
 func (state *State) paintVNCRows(canvas *gfx.Canvas) {
 	editor, m := &state.editor, state.messages.Desktop
 	b := &editor.form.vncBody
-	state.paintDialogCheckbox(canvas, hitDialogViaSSH, m.ViaSSH, editor.viaSSH, b.tunnel)
+	viaLabel := m.ViaSSH
+	if state.desktopRouteConfigured() {
+		viaLabel = m.ViaSSHRouted
+		state.paintDialogCheckboxDisabled(canvas, hitDialogViaSSH, viaLabel, editor.viaSSH, b.tunnel)
+	} else {
+		state.paintDialogCheckbox(canvas, hitDialogViaSSH, viaLabel, editor.viaSSH, b.tunnel)
+	}
 	state.paintDialogCheckbox(canvas, hitDialogClipboard, m.ShareClipboard, editor.clipboard, b.clipboard)
 	state.paintDialogCheckbox(canvas, hitDialogChromeless, m.HideBars, editor.chromeless, b.chromeless)
 	// The rows this frame laid out are the ones before a protocol click wrote
@@ -755,8 +829,16 @@ func (state *State) declareHostVNCRows(c ui.C) {
 	editor, m := &state.editor, state.messages.Desktop
 	b := &editor.form.vncBody
 	*b = hostVNCRowsBody{}
+	viaLabel, routed := m.ViaSSH, state.desktopRouteConfigured()
+	if routed {
+		viaLabel = m.ViaSSHRouted
+	}
 	ui.Column(c).Fill().Children(func() {
-		b.tunnel = state.declareDialogCheckboxC(c, m.ViaSSH, 4, 0)
+		if routed {
+			b.tunnel = state.declareDialogCheckboxMutedC(c, viaLabel, 4, 0)
+		} else {
+			b.tunnel = state.declareDialogCheckboxC(c, viaLabel, 4, 0)
+		}
 		b.clipboard = state.declareDialogCheckboxC(c, m.ShareClipboard, 12, 0)
 		b.chromeless = state.declareDialogCheckboxC(c, m.HideBars, 12, 0)
 		if editor.protocol == protocolRDP {

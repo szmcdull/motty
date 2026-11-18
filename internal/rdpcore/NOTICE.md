@@ -73,6 +73,16 @@ Changed:
   repeat a held key: `SendKeyboard` and `SendUnicode` take a `repeat` argument
   and a repeat press carries `KBD_FLAGS_DOWN` (`0x4000`), the flag FreeRDP and
   mstsc set on a key the server already has down.
+* The heartbeat pauses while output is suppressed and starts a fresh window on
+  resume. A hidden tab tells the server to stop sending picture updates, so the
+  expected silence was being read as a dead link and ended the connection about
+  ten seconds after switching away; the keepalive is skipped meanwhile because
+  a suppressed server must not answer it.
+* A 32bpp pointer's alpha channel decides transparency, with the AND mask able
+  only to hide a pixel; 32bpp data with no alpha at all still falls back to the
+  masks. xrdp sends X cursors at 32bpp with per-pixel alpha and a zero AND
+  mask, which upstream's rule rendered as an opaque black square around the
+  pointer.
 * The EGFX `ResetGraphics` PDU clears surfaces, output maps and frame state but
   keeps the progressive-codec decoder. Its tile context (SYNC, CONTEXT and
   simple tiles) is not part of the graphics output; Windows sends only UPGRADE
@@ -85,3 +95,12 @@ Changed:
 * Fixes found by fuzzing (`fuzz_test.go`, corpus in `testdata/fuzz`): zero-length
   runs in the Planar codec, ZGFX history distance, padding and expansion limits,
   an MPPC history bound.
+* The progressive decoder keeps a coefficient's sign in one byte instead of two.
+  The value is +1, -1 or 0, so the byte is exact; every tile the decoder keeps
+  for a later UPGRADE is 12 KiB smaller. Coefficients stay for the surface's
+  whole lifetime because a later tile may be differential to them.
+* The EGFX pixel budget is split in two: surfaces keep the 512 MiB bound, and the
+  bitmap cache is held to the 100 MiB ceiling MS-RDPEGFX 3.3.1.4 gives a client
+  that does not ask for the small cache (the cache is evicted instead of dropping
+  the connection). One shared budget had let a session hold 512 MiB of cache
+  alone, five times what the protocol allows.

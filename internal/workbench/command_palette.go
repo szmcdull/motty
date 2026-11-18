@@ -82,7 +82,8 @@ type commandPalette struct {
 	connect    bool
 	workspaces bool
 	// localShells expands the Local Terminal row into the shells this computer
-	// can run, inside the same searchable new-tab list.
+	// can run, inside the same searchable new-tab list. It is opened from the
+	// saved preference and written back through setLocalShellsExpanded.
 	localShells bool
 	// snippets makes the list a picker of the saved snippets to send to the
 	// active terminal, opened from the terminal toolbar.
@@ -158,16 +159,14 @@ func (state *State) rebuildCommandPalette() {
 		state.rebuildSnippetPicker()
 		return
 	}
-	palette.add(messages.NavHosts, hitHosts)
-	palette.add(messages.NavWorkspaces, hitWorkspaces)
-	palette.add(messages.NavKeychain, hitKeychain)
-	palette.add(messages.NavPortForwarding, hitPortForwarding)
-	palette.add(messages.NavProxies, hitProxies)
-	palette.add(messages.NavKnownHosts, hitKnownHosts)
+	// The sidebar's pages are the palette's navigation: the table that orders the
+	// sidebar also names each page here, and each page's label is the one the
+	// sidebar shows. A page added there is reachable from the palette without
+	// being added a second time, which is how the monitor page went missing.
+	for _, page := range sidebarPages {
+		palette.add(state.navPageLabel(page.page), page.id)
+	}
 	palette.add(messages.NavSettings, hitSettings)
-	palette.add(messages.NavSnippets, hitSnippets)
-	palette.add(state.noteText("Notes", "笔记"), hitNotes)
-	palette.add(messages.SessionLogs.Title, hitSessionLogs)
 	state.devAddPaletteCommands(palette)
 	if state.options.NewWindow != nil {
 		palette.add(messages.NewWindow, hitNewWindow)
@@ -177,6 +176,7 @@ func (state *State) rebuildCommandPalette() {
 	palette.add(messages.SSHConfigImport, hitImportSSHConfig)
 	palette.add(messages.Tools.ImportSessions, hitImportSessions)
 	if state.deck.ActiveWorkspace() != 0 {
+		palette.add(messages.HostsPanel.Toggle, hitHostsPanel)
 		palette.add(messages.AIPanel.Toggle, hitAIToggle)
 	}
 	if _, ok := state.sessionByIDPointer(state.activeSessionID); ok {
@@ -188,6 +188,9 @@ func (state *State) rebuildCommandPalette() {
 		palette.add(messages.MenuRenameTerminal, hitPaneRename)
 		palette.add(messages.SFTPOpen, hitSFTPOpen)
 		if session, _ := state.sessionByIDPointer(state.activeSessionID); session != nil {
+			if session.canViewRemoteLogs() {
+				palette.add(messages.RemoteLogs.Title, hitServerLogs)
+			}
 			if _, ok := state.localProxyTarget(session); ok && !session.host.isDesktop() {
 				palette.addDetailed(messages.LocalProxy.Title, state.sessionAddress(session.host), hitLocalProxyOpen)
 			}
@@ -354,7 +357,7 @@ func (state *State) clickCommandPalette(id gfx.ID) {
 			return
 		}
 		if id == hitConnectPickShellPicker {
-			state.commandPalette.localShells = !state.commandPalette.localShells
+			state.setLocalShellsExpanded(!state.commandPalette.localShells)
 			state.rebuildCommandPalette()
 			return
 		}
@@ -519,7 +522,7 @@ func (state *State) commandPaletteKey(event gfx.KeyEvent) (gfx.EventResult, bool
 			if palette.localShells == expand {
 				return gfx.EventResult{}, false
 			}
-			palette.localShells = expand
+			state.setLocalShellsExpanded(expand)
 			state.rebuildCommandPalette()
 			first := palette.choiceAt(0, 1)
 			if first < 0 {

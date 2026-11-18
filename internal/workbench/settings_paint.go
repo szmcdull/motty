@@ -31,6 +31,7 @@ const (
 	controlHit                                   // the slot is a pointer target
 	controlSearch                                // the search box
 	controlModelInput                            // the assistant's model-name field
+	controlStepsValue                            // the assistant's step-count field between its − and + buttons
 	controlFindPreference
 	controlWordSeparators   // the terminal's word-selection separators
 	controlSwatches         // a strip of round color dots
@@ -131,8 +132,27 @@ func (state *State) declareSettingsWorkspace(c ui.C) {
 	bounds := state.settingsWorkspaceBounds(c.Bounds())
 	view.pageView = bounds.Height
 	maxScroll := max(state.settingsContent-bounds.Height, 0)
-	state.settingsScroll = min(max(state.settingsScroll, 0), maxScroll)
-	view.navScroll = min(max(view.navScroll, 0), max(view.navContent-view.navView, 0))
+	navMax := max(view.navContent-view.navView, 0)
+	if clamped := min(max(state.settingsScroll, 0), maxScroll); clamped != state.settingsScroll {
+		state.settingsScroll = clamped
+		view.pageMotion = gfx.Motion{} // a correction, not a wheel gesture
+	}
+	if clamped := min(max(view.navScroll, 0), navMax); clamped != view.navScroll {
+		view.navScroll = clamped
+		view.navMotion = gfx.Motion{}
+	}
+	// The wheel wrote a target; the page lays out a value on its way there.
+	// Animate keeps that value between paints, and the motion the wheel left in
+	// the view is what carries it frame after frame: passing it again with the
+	// same target changes nothing. A programmatic jump clears it, so the next
+	// paint lands at once. Without a frame clock (tests, static previews)
+	// Animate returns the target, so those paint the settled position.
+	pageShown, navShown := state.settingsScroll, view.navScroll
+	if canvas := c.Canvas(); canvas != nil {
+		pageShown = canvas.Animate(hitSettingsPageScroll, 0, state.settingsScroll, view.pageMotion)
+		navShown = canvas.Animate(hitSettingsNavScroll, 0, view.navScroll, view.navMotion)
+	}
+	view.pageShown, view.navShown = min(pageShown, maxScroll), min(navShown, navMax)
 
 	pal := state.pal
 	navWidth := min(settingsNavWidthMax, max(bounds.Width*0.26, 150))
@@ -145,14 +165,15 @@ func (state *State) declareSettingsWorkspace(c ui.C) {
 
 	view.controls, view.actions, view.colors = view.controls[:0], view.actions[:0], view.colors[:0]
 	page := settingsPage{state: state, c: c, width: min(settingsColumnMax, max(areaWidth-64, 0)), rowHeight: settingsRowHeight}
-	// The wheel in settings.go owns the offsets; each area starts at its
-	// declared offset and the paint reads the clamped value back afterwards.
+	// The wheel in settings.go owns the targets; each area starts at the value
+	// the page shows on the way to one, and the paint clamps the target
+	// afterwards.
 	c.Part(settingsWorkspacePart)
 	ui.Stack(c).Absolute().Left(bounds.X).Top(bounds.Y).Width(bounds.Width).Height(bounds.Height).Clip().Children(func() {
 		ui.Row(c).Fill().Children(func() {
 			page.nav(navWidth, searching)
 			ui.Column(c).Width(1).FillHeight().Background(withAlpha(pal.line, 0.8))
-			page.scroll = ui.ScrollAt(c, state.settingsScroll).Grow(1).Basis(0).Items(ui.Center)
+			page.scroll = ui.ScrollAt(c, view.pageShown).Grow(1).Basis(0).Items(ui.Center)
 			page.scroll.Children(func() {
 				ui.Column(c).FillWidth().MaxWidth(settingsColumnMax).MarginSides(settingsPageTop, 32, settingsPageBottom, 32).Children(func() {
 					page.header(title, searching)
@@ -183,24 +204,29 @@ func (state *State) paintSettingsDetails(canvas *gfx.Canvas) {
 	state.settingsContent = page.scroll.Content()
 	view.navContent, view.navView = page.navList.Content(), page.navList.Rect().Height
 	view.navRect = page.navList.Rect()
-	// The layout clamps the areas' offsets to the content it just laid out; take
-	// that back so the wheel, the next paint and the tests all agree. A clamp is a
-	// move the user did not make, so one paint shows the corrected offset.
-	if offset := page.scroll.ScrollState().Offset; offset != state.settingsScroll {
-		state.settingsScroll = offset
+	// The layout clamps an area to its content. That correction belongs to the
+	// target, not to the animated value the paint laid out: writing the shaken
+	// value back would stop the motion part way. A clamp the user did not ask
+	// for lands on the next paint.
+	if maxScroll := max(state.settingsContent-view.pageView, 0); state.settingsScroll > maxScroll {
+		state.settingsScroll = maxScroll
+		view.pageMotion = gfx.Motion{}
 		canvas.RequestFrame()
 	}
-	if offset := page.navList.ScrollState().Offset; offset != view.navScroll {
-		view.navScroll = offset
+	if maxNav := max(view.navContent-view.navView, 0); view.navScroll > maxNav {
+		view.navScroll = maxNav
+		view.navMotion = gfx.Motion{}
 		canvas.RequestFrame()
 	}
 	state.paintSettingsControls(canvas)
 
 	if page.anchored {
 		// Asked to scroll to a setting: it is known where it is now that the page
-		// is laid out; one more paint shows the page there.
-		contentY := page.anchor.Rect().Y - page.scroll.Rect().Y + state.settingsScroll
+		// is laid out; one more paint shows the page there. The row sits at the
+		// offset the paint showed, so the anchor is measured from that value.
+		contentY := page.anchor.Rect().Y - page.scroll.Rect().Y + view.pageShown
 		state.settingsScroll = max(contentY-2*settingsPageTop-8-page.anchorShift, 0)
+		view.pageMotion = gfx.Motion{}
 		view.jumped = true
 	}
 	if view.jumped {
@@ -245,6 +271,8 @@ func (state *State) paintSettingsControls(canvas *gfx.Canvas) {
 			state.paintSettingsSearchBox(canvas, rect)
 		case controlModelInput:
 			state.paintAIModelInput(canvas, rect)
+		case controlStepsValue:
+			state.paintAIStepsValue(canvas, rect)
 		case controlFindPreference:
 			state.paintFindSetting(canvas, control.id, rect)
 		case controlWordSeparators:
@@ -362,8 +390,9 @@ func (state *State) paintGeneralSettings(page *settingsPage) {
 					func() { state.save() }, nil)
 			}
 			state.paintToolbarSettingsRows(page)
+			state.paintSidebarSettingsRow(page)
 		})
-		state.paintUpdateSettings(page)
+		state.paintDiagnosticsSetting(page)
 	})
 }
 
@@ -424,6 +453,7 @@ func (state *State) paintTerminalSettings(page *settingsPage) {
 				func() { state.tabTitleMode = tabTitle; state.save() })
 			page.toggleRow(state.messages.Tools.LatencyRow, state.messages.Tools.LatencyDescription, state.terminalShowLatency, hitSettingsLatencyToggle)
 			page.toggleRow(state.messages.Tools.PasteImageRow, state.messages.Tools.PasteImageDescription, !state.pasteImageOff, hitSettingsPasteImageToggle)
+			page.toggleRow(state.messages.Tools.PasteConfirmRow, state.messages.Tools.PasteConfirmDescription, !state.pasteConfirmOff, hitSettingsPasteConfirmToggle)
 			page.toggleRow(state.messages.Tools.CloseConfirmRow, state.messages.Tools.CloseConfirmDescription, !state.closeConfirmOff, hitSettingsCloseConfirmToggle)
 			page.toggleRow(state.messages.Tools.PasswordHintRow, state.messages.Tools.PasswordHintDescription, !state.passwordHintOff, hitSettingsPasswordHintToggle)
 			page.toggleRow(state.messages.Tools.NotifyRow, state.messages.Tools.NotifyDescription, !state.notifyOff, hitSettingsNotifyToggle)
@@ -524,6 +554,14 @@ func (page *settingsPage) rowOf(height float32) ui.Box {
 func (page *settingsPage) growRow() ui.Box {
 	page.separator()
 	return ui.Row(page.c).MinHeight(page.rowHeight).Items(ui.Center).PadY(6)
+}
+
+// hintRow is words that explain the rows around them, with no control of their
+// own. It grows with the text rather than clipping it.
+func (page *settingsPage) hintRow(description string) {
+	page.growRow().PadX(18).Children(func() {
+		ui.Paragraph(page.c, description, 0).FontSize(metrics.FontSizeS).Color(page.state.pal.muted).LineHeight(15)
+	})
 }
 
 // line is one row of a group: the name and explanation on the left, wrapping to

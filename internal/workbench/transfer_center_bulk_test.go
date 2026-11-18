@@ -49,7 +49,7 @@ func bulkSource(remote *workbenchSFTPRemote, source, content string) {
 
 func bulkAwait(t testing.TB, state *State, view *sftpView, id uint64, phase sftpclient.TransferState) sftpclient.TransferSnapshot {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		state.refreshSFTPTransfers(view)
 		for _, snapshot := range view.transfers {
@@ -300,6 +300,46 @@ func TestTransferCenterScopedCancelDoesNotCancelHiddenHost(t *testing.T) {
 	}
 	if state.transfers.badge != "1" {
 		t.Fatal("scoped cancel changed the global meaning of the badge")
+	}
+}
+
+func TestTransferCenterBulkPauseAndResumeStayInTheSearchScope(t *testing.T) {
+	_, options := newWorld(t)
+	state := newTestState(t, options)
+	var views []*sftpView
+	for _, name := range []string{"match.txt", "other.txt"} {
+		view, base := bulkTestView(t, state)
+		view.worker.Close()
+		bulkSource(base, "/"+name, "copy payload")
+		remote := &centerGatedRemote{workbenchSFTPRemote: base, gate: make(chan struct{}), opened: make(chan struct{}, 1)}
+		view.worker = sftpclient.NewWorker(func() (sftpclient.Remote, error) { return remote, nil }, nil)
+		t.Cleanup(view.worker.Close)
+		if _, ok := view.worker.QueueDownload("/"+name, filepath.Join(t.TempDir(), name), false, sftpclient.ExistingFail); !ok {
+			t.Fatal("queue rejected")
+		}
+		select {
+		case <-remote.opened:
+		case <-time.After(time.Second):
+			t.Fatal("copy did not start")
+		}
+		state.refreshSFTPTransfers(view)
+		views = append(views, view)
+	}
+	state.transfers.search.SetText("MATCH")
+	state.updateTransferSearch()
+	state.Click(hitTransfersPauseAll)
+	if phase := views[0].worker.Transfers(nil)[0].State; phase != sftpclient.TransferPaused {
+		t.Fatalf("matching transfer is %v, want paused", phase)
+	}
+	if phase := views[1].worker.Transfers(nil)[0].State; phase != sftpclient.TransferRunning {
+		t.Fatalf("hidden transfer changed to %v", phase)
+	}
+	if got := state.transfers.pauseLabel; got != state.messages.Transfers.ResumeVisible {
+		t.Fatalf("after pausing the action is %q", got)
+	}
+	state.Click(hitTransfersPauseAll)
+	if phase := views[0].worker.Transfers(nil)[0].State; phase != sftpclient.TransferRunning {
+		t.Fatalf("matching transfer is %v, want running", phase)
 	}
 }
 

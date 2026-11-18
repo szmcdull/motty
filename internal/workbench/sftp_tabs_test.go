@@ -37,6 +37,25 @@ func openSFTPTabFixture(t *testing.T) (*State, *Session, *sftpWindow, *workbench
 	return state, source, w, remote, localDir
 }
 
+// Switching to a file tab hands the keyboard to the path control that is
+// actually painted: the field in permanent-input mode, the edit button in
+// breadcrumbs mode.
+func TestSFTPTabFocusTargetFollowsThePathMode(t *testing.T) {
+	state, _, window, _, _ := openSFTPTabFixture(t)
+	if state.activeSection != sectionSFTP || state.activeSFTPWindow() != window {
+		t.Fatal("the file tab is not the active section")
+	}
+	state.sftpPathInput = false
+	window.view.lfolder.pathEditing = false
+	if got := state.activeTopTabFocusHit(); got != sftpWindowPathEdit[0] {
+		t.Fatalf("breadcrumbs focus target = %v, want %v", got, sftpWindowPathEdit[0])
+	}
+	state.sftpPathInput = true
+	if got := state.activeTopTabFocusHit(); got != sftpWindowPath[0] {
+		t.Fatalf("permanent path input focus target = %v, want %v", got, sftpWindowPath[0])
+	}
+}
+
 func waitSFTPTab(t *testing.T, state *State, w *sftpWindow, ready func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(4 * time.Second)
@@ -672,6 +691,21 @@ func TestFileTabOwnsWindowNamedMenuRows(t *testing.T) {
 	}
 	if source.files.dialog != sftpDialogNone {
 		t.Fatalf("the docked view took the tab's menu row: dialog %v", source.files.dialog)
+	}
+}
+
+func TestSFTPFileTabShowsItsFullTitleOnHover(t *testing.T) {
+	state, _, w, _, _ := openSFTPTabFixture(t)
+	w.session.Title = "production-db-replica-01.example.internal"
+	label := state.sftpFileTabTitle(w)
+	var canvas gfx.Canvas
+	state.Paint(&canvas, gfx.Size{Width: 600, Height: 900})
+	hit, ok := hitByID(&canvas, sftpFileTabID(w.session.ID))
+	if !ok {
+		t.Fatal("the file transfer tab is not painted")
+	}
+	if hit.Hint != label {
+		t.Fatalf("hovering the file transfer tab should show its full title, got hint %q want %q", hit.Hint, label)
 	}
 }
 

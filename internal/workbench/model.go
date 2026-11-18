@@ -41,6 +41,11 @@ type Host struct {
 	Auth       hostAuth
 	Identity   string
 	SSHOptions *sshconfig.ConnectionOptions
+	// IdentitiesOnly keeps automatic authentication to the identities
+	// configured here: the ssh-agent is offered only the keys that match a
+	// default, imported or host-specific identity, so an agent holding many
+	// keys cannot spend the server's authentication budget first.
+	IdentitiesOnly bool
 	// Credential is the id of the saved password (see credentials.go) the host
 	// takes its password from; empty keeps the host's own. An id that no saved
 	// password has is treated as empty.
@@ -61,11 +66,19 @@ type Host struct {
 	NoHistory bool
 	// LoginCommand is typed into each new shell of an SSH host once it is ready
 	// for input, as the user would type it. One line, empty for none.
-	LoginCommand string
+	LoginCommand   string
+	RemoteLogPaths []remoteLogPath
 	// Encoding is the character set of the remote shell's byte stream. Empty
 	// means UTF-8. A legacy server whose LANG names GB18030, Big5 or Shift_JIS
 	// needs its output decoded and its input encoded with that charset.
 	Encoding string
+	// IdleKeepAlive types input into an idle shell at this interval, which some
+	// servers require to keep a session from being closed for inactivity. Zero
+	// is off. IdleInput chooses what is typed, and IdleInputCustom holds the
+	// escaped text when that choice is custom.
+	IdleKeepAlive   time.Duration
+	IdleInput       idleInputMode
+	IdleInputCustom string
 	// tunnel marks the ephemeral host of a .xsh bastion tunnel opened on this
 	// computer. It is never saved, so only that launch gets the relaxed policy.
 	tunnel bool
@@ -119,6 +132,7 @@ func (host *Host) finish() {
 // presentation state: conn owns the network, term holds the screen and the
 // shell, the other fields are what the window last read from the connection.
 type Session struct {
+	remoteLogs       *remoteLogView
 	workspaceCommand WorkspaceCommand    // immutable workspace configuration for this session
 	outputAlert      terminalOutputAlert // runtime only; connection status stays independent
 
@@ -144,6 +158,11 @@ type Session struct {
 
 	host     Host // what was dialed, to dial again
 	jumpPath string
+	// desktopTunnel says this remote desktop is reached over SSH: its ViaSSH
+	// tunnel, or the jump route that carries its port. It is what the desktop's
+	// own encryption and login rows follow, where host.tunneled() names only
+	// the same-machine switch.
+	desktopTunnel bool
 	// proxyRoute is the effective outbound proxy frozen when this connection
 	// was dialed. Editing the host updates host, but not the live transport.
 	proxyRoute   string
@@ -161,6 +180,10 @@ type Session struct {
 	// avoidShare makes the next connection a fresh one: the server refused one
 	// more channel on the shared connection.
 	avoidShare bool
+	// fileConnectionSeparate says the server refused a session channel on this
+	// terminal's transport, so the file panel opens its own connection instead
+	// of asking it again. A new terminal connection forgets it.
+	fileConnectionSeparate bool
 	// notified is when this terminal last had a notification shown.
 	notified  time.Duration
 	didNotify bool
@@ -181,11 +204,13 @@ type Session struct {
 	transfer fileTransfer
 	rzsz     *rzszJob
 	// desk is the remote desktop a VNC tab shows; nil for every other kind.
-	desk     *desktopView
-	version  uint64
-	phase    sshconn.Phase
-	attempt  int
-	answered uint64
+	desk    *desktopView
+	version uint64
+	phase   sshconn.Phase
+	attempt int
+	// securityKey is set while the agent waits for a hardware key.
+	securityKey bool
+	answered    uint64
 	// otpSent is set once a one-time code was typed for this connection, so a
 	// refused one is never sent again by itself.
 	otpSent   bool
@@ -200,6 +225,10 @@ type Session struct {
 	fileHistory [2]sftpSavedHistory
 	// pastingImage is set while a pasted image is on its way to the server.
 	pastingImage bool
+	// agent is the coding agent in this local terminal's foreground, and
+	// agentWatch is when that was last read; both are cleared when the shell ends.
+	agent      codingAgent
+	agentWatch agentWatch
 	// relay is where this session's background goroutines report progress. It
 	// points at the window the session is in, and moves with the session.
 	relay *notifyRelay

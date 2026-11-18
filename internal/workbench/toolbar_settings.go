@@ -28,7 +28,7 @@ type toolbarSpec struct {
 // available in a particular connection/split/local-files context.
 var toolbarCatalog = [3][]toolbarSpec{
 	toolbarWindow: {
-		{"transfers", hitTransferCenter, iconTransfer}, {"assistant", hitAIToggle, iconBot},
+		{"transfers", hitTransferCenter, iconTransfer}, {"hosts", hitHostsPanel, iconDirectoryTree}, {"assistant", hitAIToggle, iconBot},
 		{"local-terminal", hitWindowLocalTerminal, iconTerminal}, {"commands", hitCommandPalette, iconSearch},
 		{"theme", hitTheme, iconMoon}, {"github", hitGitHub, iconGitHub}, {"settings", hitWindowSettings, iconSettings},
 	},
@@ -38,21 +38,22 @@ var toolbarCatalog = [3][]toolbarSpec{
 		{"latency", hitToolbarLatency, iconActivity},
 		{"notes", hitNotesPanel, iconNotebook},
 		{"close-pane", hitPaneClose, iconClose}, {"broadcast", hitBroadcast, iconRadio},
-		{"snippets", hitTerminalSnippets, iconNote},
+		{"snippets", hitTerminalSnippets, iconSnippets},
 		{"split-horizontal", hitPaneSplitHorizontal, iconColumns2}, {"split-vertical", hitPaneSplitVertical, iconRows2},
 		{"record", hitTerminalRecord, iconRecord}, {"export-recording", hitTerminalRecordingExport, iconFilm},
 		{"save-output", hitTerminalSaveOutput, iconSave},
 		{"export-log", hitConnExport, iconFileDown}, {"resources", hitRemoteStats, iconActivity},
-		{"files", hitSFTPOpen, iconFolderOpen}, {"local-proxy", hitLocalProxyOpen, iconGlobe},
+		{"files", hitSFTPOpen, iconFolderOpen}, {"local-proxy", hitLocalProxyOpen, iconLocalProxy},
 		{"file-transfer", hitSFTPDetach, iconSFTPTransfer},
 		{"remote-tools", hitProcessToolsOpen, iconProcess},
+		{"remote-logs", hitServerLogs, iconFileClock},
 	},
 	toolbarSFTP: {
 		{"upload-file", hitSFTPUpload, iconUpload}, {"upload-folder", hitSFTPUploadDirectory, iconFolderUp},
 		{"new-folder", hitSFTPNewDirectory, iconFolderPlus}, {"new-link", hitSFTPNewLink, iconLink},
 		{"local-remote", hitSFTPPaneToggle, iconHosts}, {"refresh", hitSFTPRefresh, iconRefresh},
 		{"follow-folder", hitSFTPFollowToggle, iconFollowFolder},
-		{"panel-side", hitSFTPPanelSide, iconColumns2}, {"close", hitSFTPClose, iconClose},
+		{"locate-terminal", hitSFTPLocateTerminal, iconTerminal},
 	},
 }
 
@@ -194,6 +195,8 @@ func (state *State) toolbarLabel(id gfx.ID) string {
 	switch id {
 	case hitTransferCenter:
 		return m.Transfers.Title
+	case hitHostsPanel:
+		return m.HostsPanel.Toggle
 	case hitAIToggle:
 		return m.AIPanel.ToggleTip
 	case hitWindowLocalTerminal:
@@ -224,6 +227,8 @@ func (state *State) toolbarLabel(id gfx.ID) string {
 		return m.Tools.LatencyRow
 	case hitProcessToolsOpen:
 		return m.Tools.RemoteTabProcesses
+	case hitServerLogs:
+		return m.RemoteLogs.Title
 	case hitNotesPanel:
 		return state.noteText("Notes", "笔记")
 	case hitTerminalRecord:
@@ -254,10 +259,8 @@ func (state *State) toolbarLabel(id gfx.ID) string {
 		return m.SFTPRefresh
 	case hitSFTPFollowToggle:
 		return m.Tools.FilesFollow
-	case hitSFTPPanelSide:
-		return m.Toolbars.PanelSide
-	case hitSFTPClose:
-		return m.TipSFTPClose
+	case hitSFTPLocateTerminal:
+		return m.Tools.FilesLocateTerminal
 	}
 	return ""
 }

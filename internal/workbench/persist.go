@@ -34,6 +34,9 @@ const shortcutSchemaVersion = 1
 type savedState struct {
 	RecentConnectSort bool                 `json:"recent_connect_sort,omitempty"`
 	RecentConnections map[string]time.Time `json:"recent_connections,omitempty"`
+	// LocalShellsExpanded keeps the new-tab picker listing the shells under the
+	// Local Terminal row once the user has opened it there.
+	LocalShellsExpanded bool `json:"local_shells_expanded,omitempty"`
 
 	MonitorPanels              []monitoring.Panel      `json:"monitor_panels,omitempty"`
 	MonitorActive              string                  `json:"monitor_active,omitempty"`
@@ -43,6 +46,7 @@ type savedState struct {
 	BackgroundOutputAlerts     bool                    `json:"background_output_alerts,omitempty"`
 	TabOrientation             string                  `json:"tab_orientation,omitempty"`
 	TabNumbers                 bool                    `json:"tab_numbers,omitempty"`
+	HiddenNav                  []string                `json:"hidden_nav,omitempty"`
 	VerticalTabsAutoHide       bool                    `json:"vertical_tabs_auto_hide,omitempty"`
 	VerticalTabsGrouping       bool                    `json:"vertical_tabs_grouping,omitempty"`
 	NetworkProxy               string                  `json:"network_proxy,omitempty"`
@@ -57,8 +61,12 @@ type savedState struct {
 	TextScale                  string                  `json:"text_scale,omitempty"` // read only: before the size was kept in pixels
 	InterfaceTextSize          int                     `json:"interface_text_size,omitempty"`
 	InterfaceFont              string                  `json:"interface_font,omitempty"`
+	InterfaceFontMain          int                     `json:"interface_font_main_weight,omitempty"`
+	InterfaceFontBold          int                     `json:"interface_font_bold_weight,omitempty"`
 	TerminalFontFace           string                  `json:"terminal_font_face,omitempty"`
 	TerminalFontFamily         string                  `json:"terminal_font_family,omitempty"`
+	TerminalFontMain           int                     `json:"terminal_font_main_weight,omitempty"`
+	TerminalFontBold           int                     `json:"terminal_font_bold_weight,omitempty"`
 	TerminalFontFallbacks      []string                `json:"terminal_font_fallbacks,omitempty"`
 	TerminalFind               terminalFindPreferences `json:"terminal_find,omitzero"`
 	TerminalScrollback         int                     `json:"terminal_scrollback,omitempty"`
@@ -96,6 +104,7 @@ type savedState struct {
 	TerminalToolbarPosition string              `json:"terminal_toolbar_position,omitempty"`
 	TerminalToolbarSize     string              `json:"terminal_toolbar_size,omitempty"`
 	TerminalBellOff         bool                `json:"terminal_bell_off,omitempty"`
+	TerminalPasteConfirmOff bool                `json:"terminal_paste_confirm_off,omitempty"`
 	TerminalInputClickOff   bool                `json:"terminal_input_click_off,omitempty"`
 	TerminalLinkPlainClick  bool                `json:"terminal_link_plain_click,omitempty"`
 	AIPanelWidth            float32             `json:"ai_panel_width,omitempty"`
@@ -129,6 +138,7 @@ type savedState struct {
 	SFTPOpenMode            string              `json:"sftp_open_mode,omitempty"`
 	SFTPColumns             string              `json:"sftp_columns,omitempty"`
 	SFTPDownloadDirectory   string              `json:"sftp_download_directory,omitempty"`
+	SFTPTransferFilter      int                 `json:"sftp_transfer_filter,omitempty"`
 	DefaultEditor           string              `json:"default_editor,omitempty"` // this computer's editor for remote folders
 	CustomEditorPath        string              `json:"custom_editor_path,omitempty"`
 	Toolbars                *savedToolbars      `json:"toolbars,omitempty"`
@@ -178,25 +188,34 @@ type savedState struct {
 	WorkspaceTemplates         []WorkspaceTemplate `json:"workspace_templates,omitempty"`
 	IdentityFiles              []string            `json:"identity_files,omitempty"`
 	// AgentHosts are the catalog ids of the hosts an agent may use without a
-	// window. It belongs to this computer, not to the hosts that sync, so a host
-	// that arrives from another device starts out closed to agents.
-	AgentHosts []string            `json:"agent_hosts,omitempty"`
-	Forwards   []savedForward      `json:"forwards,omitempty"`
-	Proxies    []savedProxy        `json:"proxies,omitempty"`
-	Sessions   []savedSession      `json:"sessions,omitempty"`
-	Deck       *layoutcore.DeckDTO `json:"deck,omitempty"`
+	// window. AgentHostMode records the last bulk choice and the default for new
+	// hosts. Both belong to this computer, not to the hosts that sync.
+	AgentHosts    []string            `json:"agent_hosts,omitempty"`
+	AgentHostMode string              `json:"agent_host_mode,omitempty"`
+	Forwards      []savedForward      `json:"forwards,omitempty"`
+	Proxies       []savedProxy        `json:"proxies,omitempty"`
+	Sessions      []savedSession      `json:"sessions,omitempty"`
+	Deck          *layoutcore.DeckDTO `json:"deck,omitempty"`
 	// An empty array distinguishes a new snapshot with no managed workspaces
 	// from an older snapshot that never recorded workspace identity.
-	WorkspaceLayouts       []savedWorkspaceLayout `json:"workspace_layouts,omitzero"`
-	Sync                   *savedSync             `json:"sync,omitempty"`
-	HostView               string                 `json:"host_view,omitempty"`
-	HostOrder              string                 `json:"host_order,omitempty"`
-	HiddenHostTags         []string               `json:"hidden_host_tags,omitempty"`
-	HostPrivacy            bool                   `json:"host_privacy,omitempty"`
-	HostPrivacyShowName    bool                   `json:"host_privacy_show_name,omitempty"`
-	HostPrivacyShowAddress bool                   `json:"host_privacy_show_address,omitempty"`
-	HostPrivacyShowUser    bool                   `json:"host_privacy_show_user,omitempty"`
-	Background             *savedBackground       `json:"background,omitempty"`
+	WorkspaceLayouts []savedWorkspaceLayout `json:"workspace_layouts,omitzero"`
+	Sync             *savedSync             `json:"sync,omitempty"`
+	// SyncExcluded is this computer's selection of what cloud sync exchanges,
+	// stored as the closed categories. It is device-local: it never becomes a
+	// shared record, and a computer without it syncs everything.
+	SyncExcluded           []syncCategory   `json:"sync_excluded,omitempty"`
+	HostView               string           `json:"host_view,omitempty"`
+	HostOrder              string           `json:"host_order,omitempty"`
+	HostSideWidth          float32          `json:"host_side_width,omitempty"`
+	HostTreeOpen           bool             `json:"host_tree_open,omitempty"`
+	HostsPanelOpen         bool             `json:"hosts_panel_open,omitempty"`
+	HostsPanelWidth        float32          `json:"hosts_panel_width,omitempty"`
+	HiddenHostTags         []string         `json:"hidden_host_tags,omitempty"`
+	HostPrivacy            bool             `json:"host_privacy,omitempty"`
+	HostPrivacyShowName    bool             `json:"host_privacy_show_name,omitempty"`
+	HostPrivacyShowAddress bool             `json:"host_privacy_show_address,omitempty"`
+	HostPrivacyShowUser    bool             `json:"host_privacy_show_user,omitempty"`
+	Background             *savedBackground `json:"background,omitempty"`
 	// Provider collections are nil while the assistant's database is unread.
 	AIProviders    *[]savedAIProvider `json:"ai_providers,omitempty"`
 	AICLIProviders *[]savedAIProvider `json:"ai_cli_providers,omitempty"`
@@ -503,6 +522,7 @@ func (state *State) snapshot() savedState {
 		BackgroundOutputAlerts:     state.backgroundOutputAlerts,
 		TabOrientation:             state.tabOrientation.String(),
 		TabNumbers:                 state.tabNumbers,
+		HiddenNav:                  state.hiddenNav.savedKeys(),
 		VerticalTabsAutoHide:       state.verticalTabs.autoHide,
 		VerticalTabsGrouping:       state.verticalTabs.grouping,
 		NetworkProxy:               state.networkProxy.String(),
@@ -512,14 +532,19 @@ func (state *State) snapshot() savedState {
 		LocalStart:                 state.localStart.String(),
 		LastLocalDirectory:         state.lastLocalDirectory,
 		RecentConnectSort:          state.recentConnectSort,
+		LocalShellsExpanded:        state.localShellsExpanded,
 		RecentConnections:          maps.Clone(state.recentConnections),
 		SSHAgent:                   savedAgent,
 		SSHAgentPath:               savedAgentPath,
 		TerminalFontSize:           int(state.terminalFontSize),
 		InterfaceTextSize:          int(state.interfaceTextSize),
 		InterfaceFont:              state.uiFont.family,
+		InterfaceFontMain:          state.uiFont.main,
+		InterfaceFontBold:          state.uiFont.bold,
 		TerminalFontFace:           terminalFontFaceString(state.fonts.classic),
 		TerminalFontFamily:         state.fonts.family,
+		TerminalFontMain:           state.fonts.main,
+		TerminalFontBold:           state.fonts.bold,
 		TerminalFontFallbacks:      slices.Clone(state.fonts.fallbacks),
 		TerminalFind:               state.terminalFindPrefs,
 		TerminalScrollback:         state.terminalScrollback,
@@ -546,6 +571,7 @@ func (state *State) snapshot() savedState {
 		TerminalToolbarPosition:    state.terminalToolbarPosition.String(),
 		TerminalToolbarSize:        state.terminalToolbarSize.String(),
 		TerminalBellOff:            state.terminalBellOff,
+		TerminalPasteConfirmOff:    state.pasteConfirmOff,
 		TerminalInputClickOff:      state.terminalInputClickOff,
 		TerminalLinkPlainClick:     state.terminalLinkPlainClick,
 		AIPanelWidth:               state.ai.panelWidth,
@@ -581,6 +607,7 @@ func (state *State) snapshot() savedState {
 		SFTPOpenMode:               state.sftpOpenMode.String(),
 		SFTPColumns:                state.sftpColumns.String(),
 		SFTPDownloadDirectory:      savedSFTPDownloadDirectory(state.sftpDownloadDirectory),
+		SFTPTransferFilter:         state.transfers.filter,
 		DefaultEditor:              string(state.defaultEditor),
 		CustomEditorPath:           state.customEditorPath,
 		Toolbars:                   state.toolbars.snapshot(),
@@ -649,6 +676,7 @@ func (state *State) snapshot() savedState {
 			Action: action.String(), Key: chord.Name(), Modifiers: uint8(chord.Modifiers),
 		})
 	}
+	saved.AgentHostMode = state.agentHostMode.saved()
 	for _, host := range state.hosts {
 		saved.Hosts = append(saved.Hosts, savedHost{
 			ID: host.CatalogID, Label: host.Label, Group: host.Group, Tags: splitHostTags(host), Icon: host.Icon.String(), Color: host.Color,
@@ -726,8 +754,13 @@ func (state *State) snapshot() savedState {
 	saved.AIProviders = state.savedAIProviders()
 	saved.AICLIProviders = state.savedAICLIProviders()
 	saved.Sync = state.savedSyncValue()
+	saved.SyncExcluded = state.syncScope.excludedCopy()
 	saved.HostView = state.hostView.saved()
 	saved.HostOrder = state.hostOrder.saved()
+	saved.HostSideWidth = state.hostSide.width
+	saved.HostTreeOpen = state.hostSide.open
+	saved.HostsPanelOpen = state.hostsPanel.open
+	saved.HostsPanelWidth = state.hostsPanel.width
 	saved.HiddenHostTags = state.hiddenHostTags
 	saved.HostPrivacy = state.hostPrivacy.enabled
 	saved.HostPrivacyShowName = !state.hostPrivacy.maskName
@@ -765,17 +798,17 @@ func (state *State) saveWithResult() error {
 // file stays as it is and the notice comes back on each change. flushSync is
 // false for a caller that schedules the sync itself.
 func (state *State) saveWithResultMode(flushSync bool) (saveErr error) {
-	return state.saveWithResultModeRecovery(flushSync, true)
+	return state.saveWithResultModeRecovery(flushSync, true, true)
 }
 
 // saveWithResultWithoutRefresh is for a save made while another store holds a
 // lock that must not be re-entered. A conflict is returned to the caller, which
 // can reload shared state after releasing that lock.
 func (state *State) saveWithResultWithoutRefresh() (saveErr error) {
-	return state.saveWithResultModeRecovery(false, false)
+	return state.saveWithResultModeRecovery(false, false, true)
 }
 
-func (state *State) saveWithResultModeRecovery(flushSync, refreshConflict bool) (saveErr error) {
+func (state *State) saveWithResultModeRecovery(flushSync, refreshConflict, notify bool) (saveErr error) {
 	defer func() {
 		message := state.noteSaveFailure()
 		unsaved := state.hasUnsavedNotes()
@@ -808,7 +841,7 @@ func (state *State) saveWithResultModeRecovery(flushSync, refreshConflict bool) 
 		}
 	}()
 	previous := state.status
-	err := state.persistSnapshot(flushSync)
+	err := state.persistSnapshot(flushSync, notify)
 	if err == nil || !errors.Is(err, configstore.ErrConflict) || state.saveRetrying || !refreshConflict {
 		return err
 	}
@@ -844,7 +877,9 @@ func (state *State) saveWithResultModeRecovery(flushSync, refreshConflict bool) 
 	// This save replaced the store the other windows were built on, so the ones
 	// showing configuration it changed have to read it back, exactly as a save
 	// that did not have to retry does.
-	state.configurationSaved(changedSavedFields(state.lastSaved, snapshot), false, flushSync)
+	if notify {
+		state.configurationSaved(changedSavedFields(state.lastSaved, snapshot), false, flushSync)
+	}
 	state.lastSaved, state.hasSaved = snapshot, true
 	state.status = previous
 	return nil
@@ -852,7 +887,7 @@ func (state *State) saveWithResultModeRecovery(flushSync, refreshConflict bool) 
 
 // persistSnapshot writes what changed since the last save and reports why it
 // could not be written.
-func (state *State) persistSnapshot(flushSync bool) error {
+func (state *State) persistSnapshot(flushSync, notify bool) error {
 	if state.saveBlocked {
 		if state.modal == modalNone {
 			state.modal = modalStateNotice
@@ -879,7 +914,9 @@ func (state *State) persistSnapshot(flushSync bool) error {
 				return err
 			}
 			state.lastSaved, state.hasSaved = snapshot, true
-			state.configurationSaved(changes, shared, flushSync)
+			if notify {
+				state.configurationSaved(changes, shared, flushSync)
+			}
 			return nil
 		}
 	}
@@ -889,7 +926,9 @@ func (state *State) persistSnapshot(flushSync bool) error {
 		return err
 	}
 	state.lastSaved, state.hasSaved = snapshot, true
-	state.configurationSaved(changes, shared, flushSync)
+	if notify {
+		state.configurationSaved(changes, shared, flushSync)
+	}
 	return nil
 }
 
@@ -995,6 +1034,7 @@ func (state *State) restoreLocal(saved savedState) {
 	state.backgroundOutputAlerts = saved.BackgroundOutputAlerts
 	state.setTabOrientation(tabOrientationFromString(saved.TabOrientation))
 	state.setTabNumbers(saved.TabNumbers)
+	state.hiddenNav = hiddenNavPages(saved.HiddenNav)
 	state.setVerticalTabsAutoHide(saved.VerticalTabsAutoHide)
 	state.setVerticalTabsGrouping(saved.VerticalTabsGrouping)
 	state.restoreSFTPLocalFavorites(saved.SFTPLocalBookmarks)
@@ -1005,6 +1045,7 @@ func (state *State) restoreLocal(saved savedState) {
 	state.localShell = saved.LocalShell
 	state.hiddenShells = cleanShellPaths(saved.HiddenShells)
 	state.recentConnectSort = saved.RecentConnectSort
+	state.localShellsExpanded = saved.LocalShellsExpanded
 	state.recentConnections = maps.Clone(saved.RecentConnections)
 	state.sessionLogsOff = saved.SessionLogsOff
 	state.restoreSessionLogsView(saved.SessionLogsView)
@@ -1051,10 +1092,12 @@ func (state *State) restoreLocal(saved savedState) {
 	// Only the choice: what is in effect is decided once the window starts, when
 	// the platform has been asked what it can follow (validateInterfaceFont).
 	state.uiFont.family = strings.TrimSpace(saved.InterfaceFont)
+	state.uiFont.main, state.uiFont.bold = saved.InterfaceFontMain, saved.InterfaceFontBold
 	state.fonts.family, state.fonts.classic = "", terminalFontFaceFromString(saved.TerminalFontFace) == gfx.MonoClassic
 	if family := strings.TrimSpace(saved.TerminalFontFamily); family != "" && gfx.MonoFamily(family) != gfx.MonoSystem {
 		state.fonts.family, state.fonts.classic = family, false
 	}
+	state.fonts.main, state.fonts.bold = saved.TerminalFontMain, saved.TerminalFontBold
 	// Kept as saved, whatever this computer has installed: a copy carried to another
 	// computer comes back with the choice it was given.
 	state.fonts.fallbacks = cleanFallbackFonts(saved.TerminalFontFallbacks, state.fonts.family)
@@ -1083,8 +1126,18 @@ func (state *State) restoreLocal(saved savedState) {
 	}
 	state.restoreIdentities(saved.IdentityFiles)
 	state.agentHosts = agentHostSet(saved.AgentHosts)
+	state.agentHostMode = agentHostModeFromSaved(saved.AgentHostMode)
 	state.restoreSync(saved.Sync)
+	state.syncScope = newSyncScope(saved.SyncExcluded)
 	state.hostView = hostViewFromString(saved.HostView)
+	if saved.HostSideWidth >= hostSideMinWidth && saved.HostSideWidth <= hostSideMaxWidth {
+		state.hostSide.width = saved.HostSideWidth
+	}
+	state.hostSide.open = saved.HostTreeOpen
+	state.hostsPanel.open, state.hostsPanel.stale = saved.HostsPanelOpen, true
+	if saved.HostsPanelWidth >= hostsPanelMinWidth && saved.HostsPanelWidth <= hostsPanelMaxWidth {
+		state.hostsPanel.width = saved.HostsPanelWidth
+	}
 	state.hostPrivacy.enabled = saved.HostPrivacy
 	state.hostPrivacy.maskName = !saved.HostPrivacyShowName
 	state.hostPrivacy.maskAddress = !saved.HostPrivacyShowAddress
@@ -1136,6 +1189,7 @@ func (state *State) restoreShared(saved savedState) {
 	}
 	state.terminalShowLatency = saved.TerminalShowLatency
 	state.terminalBellOff = saved.TerminalBellOff
+	state.pasteConfirmOff = saved.TerminalPasteConfirmOff
 	state.terminalInputClickOff = saved.TerminalInputClickOff
 	state.terminalLinkPlainClick = saved.TerminalLinkPlainClick
 	if saved.TerminalSchemeDark == "" && saved.TerminalSchemeLight == "" && saved.TerminalScheme != "" {

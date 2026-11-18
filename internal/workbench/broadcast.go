@@ -145,6 +145,12 @@ func (state *State) clickTerminalTools(id gfx.ID) bool {
 		if state.setPasteImage(state.pasteImageOff) {
 			state.save()
 		}
+	case id == hitSettingsPasteConfirmToggle:
+		state.pasteConfirmOff = !state.pasteConfirmOff
+		if state.pasteConfirmOff {
+			state.cancelAllPasteQueues()
+		}
+		state.save()
 	case id == hitSettingsCloseConfirmToggle:
 		state.closeConfirmOff = !state.closeConfirmOff
 		state.save()
@@ -166,6 +172,10 @@ func (state *State) clickTerminalTools(id gfx.ID) bool {
 		state.modal = modalImportSessions
 	case state.clickCredentialSettings(id):
 	case state.clickHostTagSettings(id):
+	case id == hitSettingsHighlightManage:
+		state.openRuleManager(ruleDeleteHighlight)
+	case id == hitSettingsAutofillManage:
+		state.openRuleManager(ruleDeleteAutofill)
 	case id == hitSettingsAutofillAdd:
 		state.openAutofillDialog(nil)
 	case id == hitSettingsAutofillSudo:

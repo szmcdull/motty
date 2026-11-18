@@ -30,6 +30,20 @@ func (state *State) visibleWorkspacePixelBounds(size gfx.Size) gfx.Rect {
 }
 
 func (state *State) toolbarDockContentBounds(size gfx.Size, includeTerminal bool) gfx.Rect {
+	bounds := state.toolbarDockFrame(size, includeTerminal)
+	if includeTerminal {
+		// The session manager stands at the left of the terminals' room.
+		if extent := state.hostsPanelExtent(bounds.Width); extent > 0 {
+			bounds.X += extent
+			bounds.Width = max(bounds.Width-extent, 0)
+		}
+	}
+	return bounds
+}
+
+// toolbarDockFrame is the content area the docks leave: the room the terminals
+// and the panels docked beside them share.
+func (state *State) toolbarDockFrame(size gfx.Size, includeTerminal bool) gfx.Rect {
 	bounds := state.fullWorkspacePixelBounds(size)
 	left := state.toolbarDockSideReserveFor(true, includeTerminal)
 	right := state.toolbarDockSideReserveFor(false, includeTerminal)
@@ -63,6 +77,14 @@ func (state *State) workspacePixelBounds(size gfx.Size) gfx.Rect {
 }
 
 func (state *State) workspacePixelBoundsFor(workspaceID layoutcore.WorkspaceID, size gfx.Size) gfx.Rect {
+	bounds := state.workspaceBoundsAboveLogs(workspaceID, size)
+	if view := state.workspaceRemoteLogs(workspaceID); view != nil {
+		bounds.Height -= view.extent(bounds.Height)
+	}
+	return bounds
+}
+
+func (state *State) workspaceBoundsAboveLogs(workspaceID layoutcore.WorkspaceID, size gfx.Size) gfx.Rect {
 	bounds := state.baseWorkspacePixelBounds(size)
 	context, ok := state.deck.Context(workspaceID)
 	if ok && context.Open && size.Width >= contextDrawerAt {

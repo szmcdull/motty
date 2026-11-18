@@ -2,6 +2,7 @@ package sshconn
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"strings"
@@ -211,6 +212,32 @@ func TestAnInteractiveOnlyHostGetsOnlyPtyAndShell(t *testing.T) {
 	w.waitDone()
 }
 
+// A connection that carries one service of its own — a file transport, say —
+// sends no system probe beside it: where a server allows only the session the
+// connection is for, a probe could take its place.
+func TestANoProbesConnectionIsNotProbedForItsSystem(t *testing.T) {
+	probed := make(chan struct{}, 1)
+	server := startServer(t, func(server *testServer) {
+		server.password = "secret"
+		server.version = "SSH-2.0-OpenSSH_8.9p1"
+		server.execChannel = func(ssh.Channel) { probed <- struct{}{} }
+	})
+	h := dial(t, server, func(config *Config) { config.NoProbes = true })
+	h.phase(PhaseHostKeyPrompt)
+	h.conn.TrustHostKey(false)
+	h.phase(PhasePasswordPrompt)
+	h.conn.SubmitPassword("secret")
+	h.phase(PhaseConnected)
+	select {
+	case <-probed:
+		t.Fatal("a no-probes connection was sent a system probe")
+	case <-time.After(200 * time.Millisecond):
+	}
+	if system := h.conn.Status().System; system != SystemUnknown {
+		t.Fatalf("a no-probes connection was probed for its system: %v", system)
+	}
+}
+
 func TestShellRunsOnAPtyAndCarriesDataBothWays(t *testing.T) {
 	server := startServer(t, func(server *testServer) {
 		server.password = "secret"
@@ -289,6 +316,33 @@ func TestCommandShellUsesItsOwnPTYAndCarriesInteractiveInput(t *testing.T) {
 		t.Fatal("command PTY rejected input")
 	}
 	w.until("interactive echo", func(output string) bool { return strings.Contains(output, "echo ok\r") })
+}
+
+// A server whose terminals erase with Control+H by default, AIX for one, echoes
+// Backspace as ^? unless the pty request says which byte erases.
+func TestPtyRequestNamesTheByteBackspaceSends(t *testing.T) {
+	server := startServer(t, func(server *testServer) {
+		server.password = "secret"
+		server.version = "SSH-2.0-OpenSSH_for_Windows_9.5"
+		server.shell = echoShell
+	})
+	w := openShell(t, connect(t, server), 80, 24)
+	w.until("the greeting", func(output string) bool { return strings.Contains(output, "welcome") })
+	server.mu.Lock()
+	shell := server.lastShell
+	server.mu.Unlock()
+	shell.mu.Lock()
+	modes := []byte(shell.modes)
+	shell.mu.Unlock()
+	erase := uint32(0)
+	for ; len(modes) >= 5 && modes[0] != 0; modes = modes[5:] {
+		if modes[0] == ssh.VERASE {
+			erase = binary.BigEndian.Uint32(modes[1:5])
+		}
+	}
+	if erase != 0x7f {
+		t.Fatalf("pty erase = %#x, want the DEL that Backspace sends", erase)
+	}
 }
 
 // fakeShellState reads the single shell session the server is running.

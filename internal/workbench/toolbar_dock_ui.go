@@ -443,6 +443,8 @@ func (state *State) terminalToolbarOffers(session *Session, id gfx.ID) bool {
 	case hitRemoteStats:
 		_, _, offered := state.remoteStatsToggle(session)
 		return offered
+	case hitServerLogs:
+		return session.remoteLogHost()
 	case hitToolbarLatency:
 		return state.latencyAvailable(session)
 	case hitPaneClose:
@@ -621,14 +623,14 @@ func (state *State) toolbarDockSideReserve() float32 {
 func (state *State) declareToolbarDockSides(c ui.C) {
 	session, _ := state.toolbarRailSession()
 	for _, left := range []bool{false, true} {
-		state.declareToolbarDockSide(c, left, session, session != nil)
+		state.declareToolbarDockSide(c, left, session != nil)
 	}
 }
 
 // declareToolbarDockSide declares one side rail: its upper and lower groups
 // scroll in viewports of their own. A side the shell holds no room for declares
 // nothing and leaves no boxes behind.
-func (state *State) declareToolbarDockSide(c ui.C, left bool, session *Session, terminalVisible bool) {
+func (state *State) declareToolbarDockSide(c ui.C, left, terminalVisible bool) {
 	dock := &state.toolbarDock
 	side := toolbarDockSideAt(left)
 	scratch := &dock.sideScratch[side]
@@ -691,7 +693,8 @@ func (state *State) paintToolbarDockSide(canvas *gfx.Canvas, size gfx.Size) {
 		// workspace draws its own line against the rail instead.
 		background := state.windowFrameColor()
 		if terminalVisible && primary {
-			state.setTerminalRailTools(session, append(top, bottom...))
+			tools := append(top, bottom...)
+			state.setTerminalRailTools(session, tools)
 			if len(bottom) == 0 {
 				state.paintTerminalSideRail(canvas, bounds, session, top, background)
 				continue
@@ -702,6 +705,11 @@ func (state *State) paintToolbarDockSide(canvas *gfx.Canvas, size gfx.Size) {
 			session.term.railBounds = bounds
 		}
 		scratch := &dock.sideScratch[side]
+		// An input event can switch sections after the page declared its rail.
+		// The repaint will lay out the rail for the new section.
+		if !scratch.top.Valid() || !scratch.bottom.Valid() {
+			continue
+		}
 		var owner *Session
 		if terminalVisible && primary {
 			owner = session
@@ -858,6 +866,9 @@ func (state *State) toolbarDockPointer(event gfx.PointerEvent) gfx.EventResult {
 	if state.modal != modalNone {
 		dock.drag = toolbarDockDrag{}
 		return gfx.EventResult{}
+	}
+	if result := state.sftpToolbarPointer(event); result.Handled {
+		return result
 	}
 	drag := &dock.drag
 	switch event.Kind {

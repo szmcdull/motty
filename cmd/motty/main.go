@@ -39,6 +39,12 @@ func main() {
 	// moved main to another OS thread.
 	runtime.LockOSThread()
 	log.SetOutput(io.MultiWriter(os.Stderr, recentLog))
+	// OpenSSH runs SSH_ASKPASS as a child of ssh-add or ssh-sk-helper. Such a
+	// launch carries this marker and must answer the prompt, not claim the
+	// single instance and open a window.
+	if os.Getenv("MOTTY_FIDO_ASKPASS") == "1" {
+		os.Exit(runFidoAskpass(os.Args[1:]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "mcp-bridge" {
 		os.Exit(runMCPBridge(os.Args[2:]))
 	}
@@ -78,6 +84,9 @@ func main() {
 		windows.launch(args)
 	}
 	hub := workbench.NewAIHub(aiDatabasePath(datadir.Current().Dir))
+	// Security-key agents started for a connection are stopped on quit; a
+	// connection normally does this itself, but a quit can outrun one.
+	defer workbench.ShutdownSecurityKeyAgents()
 	err := app.RunApplication(func(application *app.Application) error {
 		application.OnQuitRequest(windows.quitWithDocuments)
 		status := newTray(application)
@@ -154,6 +163,9 @@ func main() {
 		return nil
 	})
 	hub.Close()
+	// fatal exits without running deferred functions; stop the agents here as
+	// well so a failed shutdown does not leave one running.
+	workbench.ShutdownSecurityKeyAgents()
 	if err != nil {
 		fatal(err)
 	}
@@ -245,7 +257,13 @@ func knownHostsPath(dir string) string {
 func stateDatabasePath() string {
 	dir := datadir.Current().Dir
 	if dir == "" {
-		return ""
+		// An empty directory means the platform's usual place, which is what the
+		// windows resolve the store to as well: an empty path here would read no
+		// window records at all and open a single window every time.
+		var err error
+		if dir, err = defaultDataDir(); err != nil {
+			return ""
+		}
 	}
 	return filepath.Join(dir, "config.db")
 }
@@ -336,6 +354,8 @@ func openWorkbenchWindow(application *app.Application, status *tray, hub *workbe
 	state = workbench.New(workbench.Options{
 		DevelopmentSource: importSource,
 		Invalidate:        invalidate, Invalidator: &invalidator, NewWindow: newWindow,
+		Post:              application.Post,
+		SetMenuBar:        application.SetMenuBar,
 		OpenContentWindow: application.OpenContentWindow,
 		Group:             windowGroup, Blank: place.blank, Log: recentLog,
 		LogDir: logDirectory(), PreviousCrash: crashNoticeFor(place),
@@ -480,10 +500,12 @@ func openWorkbenchWindow(application *app.Application, status *tray, hub *workbe
 			}
 		},
 	}
+	config.WindowBorderColor = state.WindowBorderColor
 	// The workbench page routes the shell's own elements and the application
 	// handlers keep the events it leaves; the workbench's Paint stays its own.
 	mainWindow, err = application.OpenWindow(state.WindowConfig(config), &canvas)
 	if err == nil {
+		state.SyncMenuBar()
 		state.SetWindow(mainWindow.Frame, func() bool { return !mainWindow.Hidden() && !mainWindow.Closed() })
 		state.SetShortcutCapture(mainWindow.CaptureSystemShortcuts)
 		state.SetFullscreenControl(mainWindow.SetFullscreen)

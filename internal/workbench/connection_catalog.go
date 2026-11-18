@@ -12,6 +12,34 @@ import (
 	"motty/internal/vault"
 )
 
+type agentHostMode uint8
+
+const (
+	agentHostModeFollow agentHostMode = iota
+	agentHostModeNone
+	agentHostModeAll
+)
+
+func (mode agentHostMode) saved() string {
+	switch mode {
+	case agentHostModeNone:
+		return "none"
+	case agentHostModeAll:
+		return "all"
+	}
+	return ""
+}
+
+func agentHostModeFromSaved(value string) agentHostMode {
+	switch value {
+	case "none":
+		return agentHostModeNone
+	case "all":
+		return agentHostModeAll
+	}
+	return agentHostModeFollow
+}
+
 // hostCatalog is what it takes to turn a saved host into a connection: the
 // hosts and the jump routes between them, the private keys the user imported,
 // the outbound proxy, and the timeouts. It draws nothing and owns no window, so
@@ -33,8 +61,10 @@ type hostCatalog struct {
 	// systemUser is the login used for a host that names none.
 	systemUser string
 	// agentHosts holds the catalog ids of the hosts an agent may use without a
-	// window (see savedState.AgentHosts).
-	agentHosts map[string]bool
+	// window (see savedState.AgentHosts). agentHostMode is the bulk choice and
+	// the default for a host created through the dialog.
+	agentHosts    map[string]bool
+	agentHostMode agentHostMode
 	// merged maps the catalog ID of each host that was folded into another when
 	// the hosts were last read (see mergeSameHosts) to the ID that stayed, for
 	// what still refers to the old one. mergedHosts says the read changed the
@@ -78,10 +108,22 @@ type connectionRoute struct {
 
 // login is the account a connection to host signs in as.
 func (catalog *hostCatalog) login(host Host) string {
+	if name := catalog.storedLogin(host); name != "" {
+		return name
+	}
+	return catalog.systemUser
+}
+
+// storedLogin is the login name the host itself names: its own, else the one of
+// the identity it uses. Empty when neither has one, and the system user applies.
+func (catalog *hostCatalog) storedLogin(host Host) string {
 	if host.User != "" {
 		return host.User
 	}
-	return catalog.systemUser
+	if entry, ok := catalog.credentialByID(host.Credential); ok {
+		return entry.User
+	}
+	return ""
 }
 
 func (catalog *hostCatalog) hostByID(id uint32) (Host, bool) {
@@ -98,7 +140,7 @@ func (catalog *hostCatalog) hostByConnection(address, user string, port uint16) 
 		port = defaultPort
 	}
 	for _, host := range catalog.hosts {
-		if host.isSSH() && host.Address == address && host.User == user && host.Port == port {
+		if host.isSSH() && host.Address == address && catalog.storedLogin(host) == user && host.Port == port {
 			return host, true
 		}
 	}
@@ -158,16 +200,25 @@ func (catalog *hostCatalog) identityForFingerprint(fingerprint string) (identity
 }
 
 func (catalog *hostCatalog) authenticationFor(host Host) sshconn.Authentication {
-	if host.Auth == authAutomatic && host.SSHOptions != nil {
-		options := host.SSHOptions
+	if host.Auth == authAutomatic {
 		authentication := sshconn.Authentication{Methods: sshconn.AuthAll, Agent: true}
-		if len(options.IdentityFiles) > 0 {
+		options := host.SSHOptions
+		if options != nil && len(options.IdentityFiles) > 0 {
 			authentication.IdentityFiles = options.IdentityFiles
 		}
-		if options.IdentitiesOnly != nil {
-			authentication.IdentitiesOnly = *options.IdentitiesOnly
-		}
-		if !authentication.IdentitiesOnly {
+		importedOnly := options != nil && options.IdentitiesOnly != nil && *options.IdentitiesOnly
+		switch {
+		case host.IdentitiesOnly:
+			// The app's own switch. Every identity configured here stays
+			// eligible — the host's files, the key library and the defaults —
+			// while the agent may only supply the keys matching one of them.
+			authentication.IdentitiesOnly = true
+			authentication.AdditionalIdentityFiles = catalog.identityPaths()
+		case importedOnly:
+			// An imported ssh_config said so: follow it exactly, without
+			// adding keys the file does not name.
+			authentication.IdentitiesOnly = true
+		default:
 			authentication.AdditionalIdentityFiles = catalog.identityPaths()
 		}
 		return authentication
@@ -179,22 +230,27 @@ func (catalog *hostCatalog) authenticationFor(host Host) sshconn.Authentication 
 			IdentityFiles: []string{},
 		}
 	case authPrivateKey:
+		authentication := sshconn.Authentication{
+			Methods:          sshconn.AuthPublicKey | sshconn.AuthKeyboardInteractive,
+			RequirePublicKey: true,
+		}
 		if fingerprint := strings.TrimSpace(host.Identity); fingerprint != "" {
+			authentication.IdentityFiles = []string{}
 			if identity, ok := catalog.identityForFingerprint(fingerprint); ok {
-				return sshconn.Authentication{Methods: sshconn.AuthPublicKey, IdentityFiles: []string{identity.Path}}
+				authentication.IdentityFiles = []string{identity.Path}
 			}
-			return sshconn.Authentication{Methods: sshconn.AuthPublicKey, IdentityFiles: []string{}}
+		} else {
+			authentication.AdditionalIdentityFiles = catalog.identityPaths()
 		}
-		return sshconn.Authentication{
-			Methods:                 sshconn.AuthPublicKey,
-			AdditionalIdentityFiles: catalog.identityPaths(),
-		}
+		return authentication
 	case authAgent:
 		return sshconn.Authentication{
 			Methods:       sshconn.AuthPublicKey,
 			IdentityFiles: []string{},
 			Agent:         true,
 		}
+	case authKerberos:
+		return sshconn.Authentication{Methods: sshconn.AuthKerberos}
 	default:
 		return sshconn.Authentication{
 			Methods:                 sshconn.AuthAll,
@@ -413,7 +469,7 @@ func (catalog *hostCatalog) sshConfigFor(host, proxyHost Host, env connectEnv) (
 func (catalog *hostCatalog) keepAliveFor(host Host) sshconn.KeepAliveConfig {
 	options := host.SSHOptions
 	if options != nil && (options.ServerAliveInterval != nil || options.ServerAliveCountMax != nil) {
-		config := sshconn.KeepAliveConfig{}
+		config := sshconn.KeepAliveConfig{UseTCP: host.InteractiveOnly}
 		if options.ServerAliveInterval != nil {
 			config.Interval = time.Duration(*options.ServerAliveInterval) * time.Second
 		} else {
@@ -429,7 +485,7 @@ func (catalog *hostCatalog) keepAliveFor(host Host) sshconn.KeepAliveConfig {
 		return config
 	}
 	if catalog.connectionKeepAlive > 0 {
-		return sshconn.KeepAliveConfig{Interval: catalog.connectionKeepAlive, Timeout: 10 * time.Second}
+		return sshconn.KeepAliveConfig{Interval: catalog.connectionKeepAlive, Timeout: 10 * time.Second, UseTCP: host.InteractiveOnly}
 	}
 	return sshconn.KeepAliveConfig{}
 }
@@ -675,17 +731,63 @@ func connectionKeepAlive(saved savedState) time.Duration {
 func catalogFromSaved(saved savedState, systemUser string, messages keyMessages) hostCatalog {
 	hosts, _ := decodeHosts(saved.Hosts, nil, 1)
 	catalog := hostCatalog{
-		hosts:       hosts,
-		proxies:     decodeProxies(saved.Proxies, hosts),
-		identities:  decodeIdentities(saved.IdentityFiles, messages),
-		credentials: decodeCredentials(saved.Credentials),
-		proxy:       decodeOutboundProxy(saved.OutboundProxy),
-		systemUser:  systemUser,
-		agentHosts:  agentHostSet(saved.AgentHosts),
+		hosts:         hosts,
+		proxies:       decodeProxies(saved.Proxies, hosts),
+		identities:    decodeIdentities(saved.IdentityFiles, messages),
+		credentials:   decodeCredentials(saved.Credentials),
+		proxy:         decodeOutboundProxy(saved.OutboundProxy),
+		systemUser:    systemUser,
+		agentHosts:    agentHostSet(saved.AgentHosts),
+		agentHostMode: agentHostModeFromSaved(saved.AgentHostMode),
 	}
 	catalog.connectionTimeout, catalog.connectionKeepAlive = connectionTimes(saved)
 	catalog.sshAgent = agentChoiceFromSaved(saved.SSHAgent, saved.SSHAgentPath)
 	return catalog
+}
+
+// effectiveAgentHostMode is the bulk mode the saved permissions actually
+// describe. A stored bulk choice only holds while every SSH host still matches
+// it; a host created, copied or imported outside the mode's own path never went
+// through it, so the page and the dialog default read the permissions rather
+// than a stored label that no longer matches them.
+func (catalog *hostCatalog) effectiveAgentHostMode() agentHostMode {
+	switch catalog.agentHostMode {
+	case agentHostModeAll:
+		for _, host := range catalog.hosts {
+			if host.isSSH() && !catalog.agentHosts[host.CatalogID] {
+				return agentHostModeFollow
+			}
+		}
+		return agentHostModeAll
+	case agentHostModeNone:
+		for _, host := range catalog.hosts {
+			if host.isSSH() && catalog.agentHosts[host.CatalogID] {
+				return agentHostModeFollow
+			}
+		}
+		return agentHostModeNone
+	}
+	return agentHostModeFollow
+}
+
+func (catalog *hostCatalog) setAgentHostMode(mode agentHostMode) {
+	switch mode {
+	case agentHostModeNone:
+		catalog.agentHosts = nil
+	case agentHostModeAll:
+		if catalog.agentHosts == nil {
+			catalog.agentHosts = make(map[string]bool)
+		}
+		for _, host := range catalog.hosts {
+			if host.isSSH() {
+				catalog.agentHosts[host.CatalogID] = true
+			}
+		}
+	case agentHostModeFollow:
+	default:
+		return
+	}
+	catalog.agentHostMode = mode
 }
 
 // setAgentAccess opens a host to agents or closes it. Only an SSH host can be

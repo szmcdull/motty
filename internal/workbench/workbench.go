@@ -231,30 +231,64 @@ var (
 
 // Jump-host routing: its page and dialog.
 var (
-	hitProxyAdd               = tree.ID(proxiesHits, "proxy-add")
-	hitProxyEdit              = tree.ID(proxiesHits, "proxy-edit")
-	hitProxyStartStop         = tree.ID(proxiesHits, "proxy-start-stop")
-	hitProxyRemove            = tree.ID(proxiesHits, "proxy-remove")
-	hitProxyDialogClose       = tree.ID(proxiesHits, "proxy-dialog-close")
-	hitProxyDialogCancel      = tree.ID(proxiesHits, "proxy-dialog-cancel")
-	hitProxyDialogSubmit      = tree.ID(proxiesHits, "proxy-dialog-submit")
-	hitProxyDialogTarget      = tree.ID(proxiesHits, "proxy-dialog-target")
-	hitProxyDialogJump        = tree.ID(proxiesHits, "proxy-dialog-jump")
-	hitProxyDialogViaShell    = tree.ID(proxiesHits, "proxy-dialog-via-shell")
-	hitProxyDialogViaHelp     = tree.ID(proxiesHits, "proxy-dialog-via-shell-help")
-	hitProxyDialogRelay       = tree.ID(proxiesHits, "proxy-dialog-relay")
-	hitProxyTargetDismiss     = tree.ID(proxiesHits, "proxy-target-dismiss")
-	hitProxyJumpDismiss       = tree.ID(proxiesHits, "proxy-jump-dismiss")
-	hitProxyTargetTrigger     = tree.ID(proxiesHits, "proxy-target-trigger")
-	hitProxyJumpTrigger       = tree.ID(proxiesHits, "proxy-jump-trigger")
-	hitProxyTargetScroll      = tree.ID(proxiesHits, "proxy-target-scroll")
-	hitProxyJumpScroll        = tree.ID(proxiesHits, "proxy-jump-scroll")
-	hitProxyTargetPickerScope = tree.ID(proxiesHits, "proxy-target-picker-scope")
-	hitProxyJumpPickerScope   = tree.ID(proxiesHits, "proxy-jump-picker-scope")
-	hitProxyScrollThumb       = tree.ID(proxiesHits, "proxy-scroll-thumb")
-	hitProxyRowList           = tree.Sub(proxiesHits, tree.Name("proxy-row"))
-	hitProxyTargetItemList    = tree.Sub(proxiesHits, tree.Name("proxy-target-item"))
-	hitProxyJumpItemList      = tree.Sub(proxiesHits, tree.Name("proxy-jump-item"))
+	hitProxyAdd                      = tree.ID(proxiesHits, "proxy-add")
+	hitProxyEdit                     = tree.ID(proxiesHits, "proxy-edit")
+	hitProxyStartStop                = tree.ID(proxiesHits, "proxy-start-stop")
+	hitProxyRemove                   = tree.ID(proxiesHits, "proxy-remove")
+	hitProxyDialogClose              = tree.ID(proxiesHits, "proxy-dialog-close")
+	hitProxyDialogCancel             = tree.ID(proxiesHits, "proxy-dialog-cancel")
+	hitProxyDialogSubmit             = tree.ID(proxiesHits, "proxy-dialog-submit")
+	hitProxyDialogTarget             = tree.ID(proxiesHits, "proxy-dialog-target")
+	hitProxyDialogJump               = tree.ID(proxiesHits, "proxy-dialog-jump")
+	hitProxyDialogViaShell           = tree.ID(proxiesHits, "proxy-dialog-via-shell")
+	hitProxyDialogViaHelp            = tree.ID(proxiesHits, "proxy-dialog-via-shell-help")
+	hitProxyDialogRelay              = tree.ID(proxiesHits, "proxy-dialog-relay")
+	hitProxyTargetDismiss            = tree.ID(proxiesHits, "proxy-target-dismiss")
+	hitProxyJumpDismiss              = tree.ID(proxiesHits, "proxy-jump-dismiss")
+	hitProxyTargetTrigger            = tree.ID(proxiesHits, "proxy-target-trigger")
+	hitProxyJumpTrigger              = tree.ID(proxiesHits, "proxy-jump-trigger")
+	hitProxyTargetScroll             = tree.ID(proxiesHits, "proxy-target-scroll")
+	hitProxyJumpScroll               = tree.ID(proxiesHits, "proxy-jump-scroll")
+	hitProxyTargetPickerScope        = tree.ID(proxiesHits, "proxy-target-picker-scope")
+	hitProxyJumpPickerScope          = tree.ID(proxiesHits, "proxy-jump-picker-scope")
+	hitProxyScrollThumb              = tree.ID(proxiesHits, "proxy-scroll-thumb")
+	hitProxyRowList                  = tree.Sub(proxiesHits, tree.Name("proxy-row"))
+	hitProxyTargetItemList           = tree.Sub(proxiesHits, tree.Name("proxy-target-item"))
+	hitProxyJumpItemList             = tree.Sub(proxiesHits, tree.Name("proxy-jump-item"))
+	hitProxyBatchAdd                 = tree.ID(proxiesHits, "proxy-batch-add")
+	hitProxyBatchRemove              = tree.ID(proxiesHits, "proxy-batch-remove")
+	hitProxyBatchToggleAll           = tree.ID(proxiesHits, "proxy-batch-toggle-all")
+	hitProxyHubTabList               = tree.Sub(proxiesHits, tree.Name("proxy-hub-tab"))
+	hitProxyBatchClose               = tree.ID(proxiesHits, "proxy-batch-close")
+	hitProxyBatchCancel              = tree.ID(proxiesHits, "proxy-batch-cancel")
+	hitProxyBatchSubmit              = tree.ID(proxiesHits, "proxy-batch-submit")
+	hitProxyBatchSearch              = tree.ID(proxiesHits, "proxy-batch-search")
+	hitProxyBatchCheckAll            = tree.ID(proxiesHits, "proxy-batch-check-all")
+	hitProxyBatchClearAll            = tree.ID(proxiesHits, "proxy-batch-clear-all")
+	hitProxyBatchOverwrite           = tree.ID(proxiesHits, "proxy-batch-overwrite")
+	hitProxyBatchCheckList           = tree.Sub(proxiesHits, tree.Name("proxy-batch-check"))
+	hitProxyTargetCheckList          = tree.Sub(proxiesHits, tree.Name("proxy-target-check"))
+	hitProxyBatchJumpInput           = tree.ID(proxiesHits, "proxy-batch-jump-input")
+	hitProxyBatchJumpTrigger         = tree.ID(proxiesHits, "proxy-batch-jump-trigger")
+	hitProxyBatchJumpDismiss         = tree.ID(proxiesHits, "proxy-batch-jump-dismiss")
+	hitProxyBatchJumpScroll          = tree.ID(proxiesHits, "proxy-batch-jump-scroll")
+	hitProxyBatchJumpScope           = tree.ID(proxiesHits, "proxy-batch-jump-scope")
+	hitProxyBatchJumpItemList        = tree.Sub(proxiesHits, tree.Name("proxy-batch-jump-item"))
+	hitProxyCheckAll                 = tree.ID(proxiesHits, "proxy-check-all")
+	hitProxyRowCheckList             = tree.Sub(proxiesHits, tree.Name("proxy-row-check"))
+	hitProxyRowSwitchList            = tree.Sub(proxiesHits, tree.Name("proxy-row-switch"))
+	hitProxyRowEditList              = tree.Sub(proxiesHits, tree.Name("proxy-row-edit"))
+	hitProxyRowDeleteList            = tree.Sub(proxiesHits, tree.Name("proxy-row-delete"))
+	hitProxyBatchDelete              = tree.ID(proxiesHits, "proxy-batch-delete")
+	hitProxyBatchStartAll            = tree.ID(proxiesHits, "proxy-batch-start-all")
+	hitProxyBatchStopAll             = tree.ID(proxiesHits, "proxy-batch-stop-all")
+	hitProxyBatchClearSel            = tree.ID(proxiesHits, "proxy-batch-clear-sel")
+	hitProxyDeleteConfirmClose       = tree.ID(proxiesHits, "proxy-del-confirm-close")
+	hitProxyDeleteConfirmCancel      = tree.ID(proxiesHits, "proxy-del-confirm-cancel")
+	hitProxyDeleteConfirmSubmit      = tree.ID(proxiesHits, "proxy-del-confirm-submit")
+	hitProxyBatchDeleteConfirmClose  = tree.ID(proxiesHits, "proxy-bdel-confirm-close")
+	hitProxyBatchDeleteConfirmCancel = tree.ID(proxiesHits, "proxy-bdel-confirm-cancel")
+	hitProxyBatchDeleteConfirmSubmit = tree.ID(proxiesHits, "proxy-bdel-confirm-submit")
 )
 
 // Known-host management: its page and dialog, with the rows and their checkboxes
@@ -290,7 +324,11 @@ var (
 	hitSFTPMove            = tree.ID(sftpHits, "sftp-move")
 	hitSFTPDelete          = tree.ID(sftpHits, "sftp-delete")
 	hitSFTPChmod           = tree.ID(sftpHits, "sftp-chmod")
-	hitSFTPChmodBits       = tree.Sub(sftpHits, tree.Name("sftp-chmod-bit")) // + the bit index
+	hitSFTPChown           = tree.ID(sftpHits, "sftp-chown")
+	hitSFTPChownDismiss    = tree.ID(sftpHits, "sftp-chown-dismiss")
+	hitSFTPChownUserItem   = tree.Sub(sftpHits, tree.Name("sftp-chown-user"))  // + the match index
+	hitSFTPChownGroupItem  = tree.Sub(sftpHits, tree.Name("sftp-chown-group")) // + the match index
+	hitSFTPChmodBits       = tree.Sub(sftpHits, tree.Name("sftp-chmod-bit"))   // + the bit index
 	hitSFTPDialogClose     = tree.ID(sftpHits, "sftp-dialog-close")
 	hitSFTPDialogCancel    = tree.ID(sftpHits, "sftp-dialog-cancel")
 	hitSFTPDialogSubmit    = tree.ID(sftpHits, "sftp-dialog-submit")
@@ -425,6 +463,8 @@ type State struct {
 	revealResults     chan revealResult
 	revealBusy        bool // only the window thread changes it; a worker returns over revealResults
 	inputConfirmation terminalInputConfirmation
+	// pasteReview holds the multi-line paste confirmation; see paste_review.go.
+	pasteReview pasteReviewUI
 	// reveal is which password fields show their text rather than bullets.
 	reveal      secretReveal
 	sftpWindows map[uint32]*sftpWindow
@@ -480,59 +520,70 @@ type State struct {
 	windowBarScroll        windowBarScroll
 	tabOrientation         tabOrientation
 	tabNumbers             bool // each tab shows its place number next to the name
-	verticalTabs           verticalTabs
-	tabMenu                tabMenu
-	hostMenu               hostMenu
-	hostPrivacy            hostPrivacyState
-	localShellPicker       localShellPicker
-	snippetMenu            snippetMenu
-	sftpMenu               sftpMenu
-	sftpHeaderMenu         sftpHeaderMenuRequest
-	fileProperties         sftpFileProperties
-	popups                 popupMenus
-	selectedHostID         uint32
-	hostRevealID           uint32
-	activeSessionID        uint32
-	nextSessionID          uint32
-	nextHostID             uint32
-	nextIdentityID         uint32
-	nextForwardID          uint32
-	nextForwardStartID     uint64
-	nextProxyID            uint32
-	forwards               []forwardRecord
+	// hiddenNav is the set of page rows the sidebar leaves out. Hiding is the
+	// entry only: the page keeps its section, shortcuts and command entry.
+	hiddenNav          navHidden
+	sidebarEditor      sidebarSettingsUI
+	verticalTabs       verticalTabs
+	tabMenu            tabMenu
+	hostMenu           hostMenu
+	hostPrivacy        hostPrivacyState
+	localShellPicker   localShellPicker
+	snippetMenu        snippetMenu
+	sftpMenu           sftpMenu
+	sftpHeaderMenu     sftpHeaderMenuRequest
+	fileProperties     sftpFileProperties
+	popups             popupMenus
+	selectedHostID     uint32
+	hostRevealID       uint32
+	activeSessionID    uint32
+	nextSessionID      uint32
+	nextHostID         uint32
+	nextIdentityID     uint32
+	nextForwardID      uint32
+	nextForwardStartID uint64
+	nextProxyID        uint32
+	forwards           []forwardRecord
 	// forwardTunnels are the SSH transports forwards use when no open tab
 	// carries one. They have no terminal and are never saved.
-	forwardTunnels     []*forwardTunnel
-	selectedIdentityID uint32
-	selectedForwardID  uint32
-	selectedProxyID    uint32
-	forwardTable       ui.TableState
-	keysTable          ui.TableState
-	proxyTable         ui.TableState
-	forwardRows        forwardTableSource
-	keysRows           keyTableSource
-	proxyRows          proxyTableSource
-	// The catalog tables' columns and headings live here rather than in each
-	// paint: a table's spec keeps them until the paint ends, so a local array
-	// would escape and allocate every frame.
-	forwardColumns    [5]components.TableColumn
-	forwardHeadings   [5]string
-	keysColumns       [4]components.TableColumn
-	keysHeadings      [4]string
-	proxyColumns      [4]components.TableColumn
-	proxyHeadings     [4]string
-	activeSection     uint8
-	hostFilterOn      bool   // only the group named hostFilter is listed
-	hostFilter        string // a group name; empty is the unnamed bucket
-	hostFilterMenu    bool   // the chips that did not fit, as a menu
-	hostFilterHidden  int    // the first of hostChips whose chip is in that menu
-	hostChips         []int  // the groups that get a chip, as indexes of hostGroups
-	chipMenu          hostChipMenu
-	filterMoreButton  gfx.Rect
-	hostTotalDigits   string
-	groupMenu         groupMenuAnchor // where the Move group picker opens
-	moveGroups        *hostMoveGroupMenu
-	hostSelectionText string
+	forwardTunnels         []*forwardTunnel
+	selectedIdentityID     uint32
+	selectedForwardID      uint32
+	selectedProxyID        uint32
+	forwardTable           ui.TableState
+	keysTable              ui.TableState
+	proxyTable             ui.TableState
+	forwardRows            forwardTableSource
+	keysRows               keyTableSource
+	proxyRows              proxyTableSource
+	forwardColumns         [5]components.TableColumn
+	forwardHeadings        [5]string
+	keysColumns            [4]components.TableColumn
+	keysHeadings           [4]string
+	proxyColumns           [6]components.TableColumn
+	proxyHeadings          [6]string
+	proxyFilteredIndices   []int
+	proxyRowCells          []gfx.Rect
+	selectedBastionJumpID  uint32
+	selectedBastionTargets map[uint32]bool
+	proxyChecked           map[uint32]bool
+	proxyPendingDeleteID   uint32
+	bastionHubs            []bastionHub
+	bastionAllChipText     string
+	bastionAllCountText    string
+	proxyBatch             proxyBatchAssociateDialog
+	activeSection          uint8
+	hostFilterOn           bool   // only the group named hostFilter is listed
+	hostFilter             string // a group name; empty is the unnamed bucket
+	hostFilterMenu         bool   // the chips that did not fit, as a menu
+	hostFilterHidden       int    // the first of hostChips whose chip is in that menu
+	hostChips              []int  // the groups that get a chip, as indexes of hostGroups
+	chipMenu               hostChipMenu
+	filterMoreButton       gfx.Rect
+	hostTotalDigits        string
+	groupMenu              groupMenuAnchor // where the Move group picker opens
+	moveGroups             *hostMoveGroupMenu
+	hostSelectionText      string
 	// inputGapNote is the last terminal input gap reported to the log, so a
 	// paint that keeps asking for a surface that cannot exist logs it once.
 	inputGapNote       string
@@ -540,6 +591,9 @@ type State struct {
 	hostSelections     []uint32
 	hostActionIDs      []uint32
 	hostGroups         []hostGroup
+	hostSide           hostCatalogSide
+	hostsPanel         hostsPanel
+	hostSideRows       []int
 	hostTreeRows       []hostTreeRow
 	hostList           hostCatalogList
 	hostGridDrag       hostGridDrag
@@ -551,15 +605,18 @@ type State struct {
 	windowVisible      func() bool
 	systemKeys         systemKeyCapture
 	winChrome          windowChrome
-	hostView           hostViewMode
-	hostOrder          hostOrderMode
-	hostOrderMenu      bool
-	hostOrderButton    gfx.Rect
-	hostSort           hostSortState
-	bg                 backgroundState
-	hostsContent       float32
-	hostGroupMenu      bool
-	importMenu         bool
+	// desktopAwake says this window already holds the sleep request for a visible
+	// remote desktop; see keepAwakeForDesktop.
+	desktopAwake    bool
+	hostView        hostViewMode
+	hostOrder       hostOrderMode
+	hostOrderMenu   bool
+	hostOrderButton gfx.Rect
+	hostSort        hostSortState
+	bg              backgroundState
+	hostsContent    float32
+	hostGroupMenu   bool
+	importMenu      bool
 	// keysMenu is the open menu under the Keychain page's Add Key button, and
 	// keysAddButton where that button was painted.
 	keysMenu          bool
@@ -580,6 +637,7 @@ type State struct {
 	hostDialogMode    hostDialogMode
 	hostDialogID      uint32
 	ruleDelete        ruleDelete
+	ruleManager       ruleManagerUI
 	hostTest          hostTest
 	hostDialogText    string
 	identityCountText string
@@ -633,23 +691,29 @@ type State struct {
 	// search is the box beside Connect: typing narrows the host list, and
 	// Connect opens what it holds. visible lists the indexes into hosts that
 	// match it; it is rebuilt when the text or the host list changes.
-	search              text.Editor
-	visible             []int
-	visibleQuery        string
-	visibleHosts        int
-	status              string
-	language            i18n.Language
-	languageChosen      bool // the user picked it; until then it follows the system
-	messages            i18n.Messages
-	modal               modalKind
-	modalSession        uint32
-	dialogError         string
-	editor              hostEditor
-	forwardEditor       forwardEditor
-	forwardDialogError  string
-	proxyEditor         proxyEditor
-	proxyDialogError    string
-	options             Options
+	search             text.Editor
+	visible            []int
+	visibleQuery       string
+	visibleHosts       int
+	status             string
+	language           i18n.Language
+	languageChosen     bool // the user picked it; until then it follows the system
+	messages           i18n.Messages
+	modal              modalKind
+	modalSession       uint32
+	dialogError        string
+	editor             hostEditor
+	forwardEditor      forwardEditor
+	forwardDialogError string
+	proxyEditor        proxyEditor
+	proxyDialogError   string
+	options            Options
+	// post runs work on the window thread; nil uses ai.inbox, which Wake drains.
+	post func(func())
+	// setMenuBar installs the macOS menu bar; menuBarSig is the state it was
+	// built for, so Wake rebuilds it only when enablement or language changed.
+	setMenuBar          func([]app.Menu) error
+	menuBarSig          string
 	appearance          appearance
 	appearanceMode      appearanceMode
 	networkProxy        networkProxyMode
@@ -660,6 +724,11 @@ type State struct {
 	linkUp              atomic.Bool
 	terminalOption      terminalOptionMode
 	recentConnectSort   bool
+	// localShellsExpanded is whether the new-tab picker lists every shell under
+	// the Local Terminal row instead of folding them behind its arrow. Like the
+	// sort beside it, it is the user's choice and the picker opens the way they
+	// left it.
+	localShellsExpanded bool
 	recentConnections   map[string]time.Time
 	localShell          string // executable on this computer; empty uses the platform default
 	localStart          localStartPolicy
@@ -709,7 +778,13 @@ type State struct {
 	// transfers is the file-panel transfer center. A terminal transfer lives on
 	// its session, so several tabs can move files at once.
 	transfers transferCenter
-	xy        xySetup
+	// sftpClip is the copied server files when this window has no Group; with a
+	// Group, the clipboard is shared by every window of the process.
+	sftpClip sftpClipboard
+	// foreignFileTab is the file tab another window's drag would land in, or
+	// zero. It highlights the tab while the drag is over it.
+	foreignFileTab uint32
+	xy             xySetup
 	// Requests from outside to connect (see launch.go), the link being asked
 	// about, and the update check.
 	launchBacklog  [][]string
@@ -721,40 +796,50 @@ type State struct {
 	closeAction    closeAction
 	relaunchAction relaunchAction
 	// The file panel's settings and the folders kept for each host.
-	sftpParallel           int
-	sftpKeepTimesOff       bool
-	sftpFollowOff          bool
-	sftpTerminalFollow     bool
-	sftpPathInput          bool
-	sftpPanelAutoOpen      bool
-	sftpDirectoryTree      bool
-	sftpWindowOrder        sftpWindowOrder
-	sftpOpenMode           sftpOpenMode
-	sftpColumns            sftpColumnPreferences
-	sftpFilesSettings      sftpFilesSettingsCache
-	sftpDownloadDirectory  string
-	defaultEditor          ExternalEditor // hands remote folders to this computer's editor
-	customEditorPath       string
-	monitorRect            gfx.Rect
-	monitorMenu            bool
-	monitorMenuRect        gfx.Rect
-	monitorResizing        bool
-	monitorResizeGrab      float32
-	monitorResizeWorkspace layoutcore.WorkspaceID
-	monitorResizeSession   uint32
-	monitorMenuSession     uint32
-	monitorWidth           float32
-	sftpPanelSide          layoutcore.ContextSide
-	sftpPanelWidth         float32
-	sftpBookmarks          []sftpBookmark
-	sftpLocalBookmarks     []string
-	secrets                secretsUI
-	shareConnections       shareConnectionsPolicy
-	tooltip                components.HoverTooltip
-	selectTypeahead        selectTypeahead
-	restorePending         bool // restored tabs have not yet been connected (see connectRestoredSessions)
-	terminalClipboard      terminalClipboardPolicy
-	terminalIntense        terminalIntense
+	sftpParallel       int
+	sftpKeepTimesOff   bool
+	sftpFollowOff      bool
+	sftpTerminalFollow bool
+	sftpPathInput      bool
+	sftpPanelAutoOpen  bool
+	sftpDirectoryTree  bool
+	sftpWindowOrder    sftpWindowOrder
+	sftpOpenMode       sftpOpenMode
+	sftpColumns        sftpColumnPreferences
+	// sftpTypeIcons is the system icon of each file extension, shared by every
+	// row and every listing. A nil map means none has been asked for yet.
+	sftpTypeIcons map[string]*fileIconSlot
+	// sftpColumnSizeWidth and sftpColumnModifiedWidth are the widths the user
+	// dragged the file lists' columns to; zero until a width was chosen, when
+	// the lists keep their width-based defaults. sftpColumnWidthsChosen says a
+	// drag or a double click has replaced those defaults.
+	sftpColumnSizeWidth     float32
+	sftpColumnModifiedWidth float32
+	sftpColumnWidthsChosen  bool
+	sftpFilesSettings       sftpFilesSettingsCache
+	sftpDownloadDirectory   string
+	defaultEditor           ExternalEditor // hands remote folders to this computer's editor
+	customEditorPath        string
+	monitorRect             gfx.Rect
+	monitorMenu             bool
+	monitorMenuRect         gfx.Rect
+	monitorResizing         bool
+	monitorResizeGrab       float32
+	monitorResizeWorkspace  layoutcore.WorkspaceID
+	monitorResizeSession    uint32
+	monitorMenuSession      uint32
+	monitorWidth            float32
+	sftpPanelSide           layoutcore.ContextSide
+	sftpPanelWidth          float32
+	sftpBookmarks           []sftpBookmark
+	sftpLocalBookmarks      []string
+	secrets                 secretsUI
+	shareConnections        shareConnectionsPolicy
+	tooltip                 components.HoverTooltip
+	selectTypeahead         selectTypeahead
+	restorePending          bool // restored tabs have not yet been connected (see connectRestoredSessions)
+	terminalClipboard       terminalClipboardPolicy
+	terminalIntense         terminalIntense
 
 	terminalDirectoryDirty bool
 	// terminalCursorSteady keeps the terminal cursor from blinking.
@@ -788,6 +873,10 @@ type State struct {
 	// terminalInputClickOff stops a click on the line being typed from moving
 	// the shell's cursor (see moveInputCursor).
 	terminalInputClickOff bool
+	// pointerHeld is true while a drag captures the pointer. The panes can change
+	// size on every motion then, and the shells are told once it is released;
+	// see resizeShell.
+	pointerHeld bool
 
 	// settingsScroll is how far the settings page is scrolled, in pixels, and
 	// settingsContent how tall it was when last painted.
@@ -854,6 +943,9 @@ type State struct {
 	notifyOff      bool
 	// pasteImageOff keeps a pasted clipboard image from being sent to a server.
 	pasteImageOff bool
+	// pasteConfirmOff skips the multi-line paste confirmation; see
+	// paste_review.go.
+	pasteConfirmOff bool
 	// passwordHintOff keeps the saved password from being offered at a sudo prompt.
 	passwordHintOff bool
 	// closeConfirmOff skips the question before closing a session that still runs.
@@ -870,9 +962,12 @@ type State struct {
 	closeAsked    bool
 	trayHintShown bool
 	sync          syncState
-	sshSync       sshSyncState
-	remote        remoteToolsView
-	edits         externalEdits
+	// syncScope is what this computer lets cloud sync exchange. It belongs to
+	// this device, so two computers may sync different sets of content.
+	syncScope syncScope
+	sshSync   sshSyncState
+	remote    remoteToolsView
+	edits     externalEdits
 	// fontSizeText is the font size as the settings page shows it, for fontSizeShown.
 	fontSizeText         string
 	fontSizeShown        float32
@@ -969,7 +1064,10 @@ type State struct {
 	clipboardRequest   remoteClipboardRequest
 	autofillRules      autofillUI
 	credentialForm     credentialUI
-	commandPalette     commandPalette
+	// credentialReturn is the modal the identity dialog returns to when the host
+	// form opened it to make an identity for itself; modalNone otherwise.
+	credentialReturn modalKind
+	commandPalette   commandPalette
 	// sessionLogs is this window's local connection journal; it is off only
 	// when the user disabled metadata capture in the settings.
 	sessionLogs    sessionLogs
@@ -992,6 +1090,7 @@ func (state *State) Close() {
 	if state == nil || state.closed {
 		return
 	}
+	state.keepAwakeForDesktop(false)
 	state.flushNoteDraft()
 	state.noteActiveLocalDirectory()
 	state.save()
@@ -1042,6 +1141,7 @@ func (state *State) Close() {
 	for index := range state.sessions {
 		session := &state.sessions[index]
 		session.closeSSHBrowser()
+		session.stopRemoteLogs()
 		state.cancelReconnect(session)
 		state.closeCompletionPath(session)
 		state.closeSFTP(session)
@@ -1050,6 +1150,7 @@ func (state *State) Close() {
 			releaseShell(session.term.shell)
 		}
 		session.term.abandonShell()
+		session.term.stopIdleKeepAlive()
 		if session.conn != nil {
 			session.conn.Cancel()
 		}
@@ -1076,6 +1177,8 @@ func New(options Options) *State {
 	state := &State{
 		notes:              notesUI{noteDraft: &noteDraft{}},
 		options:            options.withDefaults(),
+		post:               options.Post,
+		setMenuBar:         options.SetMenuBar,
 		windowID:           max(1, options.WindowID),
 		revealResults:      make(chan revealResult, 1),
 		nextSessionID:      1,
@@ -1118,6 +1221,7 @@ func New(options Options) *State {
 	state.cellWidth, state.cellHeight = (&gfx.Canvas{}).MonoCellSize(state.terminalFontSize, state.terminalFontFace)
 	state.temporaryWorkspaceLayouts = make(map[layoutcore.WorkspaceID]layoutcore.LayoutSpec)
 	state.managedWorkspaceLayouts = make(map[layoutcore.WorkspaceID]layoutcore.LayoutSpec)
+	state.proxyChecked = make(map[uint32]bool)
 	// An icon-only button names itself to the keyboard as well as the pointer.
 	state.tooltip.ShowOnFocus()
 	state.setAppearance(appearanceDark)
@@ -1132,6 +1236,7 @@ func New(options Options) *State {
 	// writes no record for it.
 	state.history.inlineOff = true
 	state.forwardRows.records, state.keysRows.records, state.proxyRows.records = &state.forwards, &state.identities, &state.proxies
+	state.proxyRows.indices, state.proxyRows.jumpID = &state.proxyFilteredIndices, &state.selectedBastionJumpID
 	state.configDefaults = defaultsOf(state.snapshot())
 	config, saved, configBase, report, err := openConfig(state.options.StatePath, state.windowID)
 	state.config, state.configBase = config, configBase
@@ -1145,6 +1250,11 @@ func New(options Options) *State {
 			}
 			return string(stamp), err
 		})
+	}
+	if config != nil {
+		// A deletion is remembered for a sync window; start is the right moment to
+		// let the ones past it go, since sync prunes only when it runs.
+		_ = state.pruneTombstones()
 	}
 	if state.options.Blank {
 		// Settings and hosts, but none of the tabs the last session left.
@@ -1388,6 +1498,13 @@ func (state *State) EditorFor(hit gfx.ID) *text.Editor {
 		case hitProxyDialogJump:
 			return &state.proxyEditor.jumpSelect.Query
 		}
+	case modalProxyBatchAssociate:
+		switch hit {
+		case hitProxyBatchSearch:
+			return &state.proxyBatch.query
+		case hitProxyBatchJumpInput:
+			return &state.proxyBatch.jumpQuery
+		}
 	case modalNewForward:
 		if hit == hitForwardDialogHost {
 			return &state.forwardEditor.hostSelect.Query
@@ -1429,12 +1546,18 @@ func (state *State) EditorFor(hit gfx.ID) *text.Editor {
 		case hitOutboundProxyBypass:
 			return &state.proxyForm.bypass
 		}
+	case modalPasteReview:
+		if hit == hitPasteReviewEditor && !state.pasteReview.readOnly {
+			return &state.pasteReview.editor
+		}
 	case modalForm:
 		return state.formEditor(hit)
 	case modalCredential:
 		switch hit {
 		case hitCredentialName:
 			return &state.credentialForm.name
+		case hitCredentialUser:
+			return &state.credentialForm.user
 		case hitCredentialPassword:
 			return &state.credentialForm.password
 		}
@@ -1557,6 +1680,9 @@ func (state *State) click(id gfx.ID, feedback bool) {
 	if state.clickDashboard(id) {
 		return
 	}
+	if state.clickRemoteLogs(id) {
+		return
+	}
 	if state.clickSessionLogs(id) {
 		return
 	}
@@ -1605,6 +1731,9 @@ func (state *State) click(id gfx.ID, feedback bool) {
 		return
 	}
 	switch state.modal {
+	case modalPasteReview:
+		state.clickPasteReview(id)
+		return
 	case modalNewHost:
 		state.clickHostDialog(id)
 		return
@@ -1641,6 +1770,9 @@ func (state *State) click(id gfx.ID, feedback bool) {
 	case modalNewProxy:
 		state.clickProxyDialog(id)
 		return
+	case modalProxyBatchAssociate:
+		state.clickProxyBatchDialog(id)
+		return
 	case modalHostKey:
 		state.clickHostKey(id)
 		return
@@ -1655,6 +1787,9 @@ func (state *State) click(id gfx.ID, feedback bool) {
 		return
 	case modalHighlightRule:
 		state.clickHighlightDialog(id)
+		return
+	case modalRuleManager:
+		state.clickRuleManager(id)
 		return
 	case modalAutofillRule:
 		state.clickAutofillDialog(id)
@@ -1694,6 +1829,9 @@ func (state *State) click(id gfx.ID, feedback bool) {
 		return
 	case modalToolbarSettings:
 		state.clickToolbarSettings(id)
+		return
+	case modalSidebarSettings:
+		state.clickSidebarSettings(id)
 		return
 	case modalSFTPColumns:
 		state.clickSFTPColumnSettings(id)
@@ -1753,7 +1891,7 @@ func (state *State) click(id gfx.ID, feedback bool) {
 		state.clickLocalProxy(id)
 		return
 	}
-	if state.clickHostOrder(id) || state.clickToolbarDockMenu(id) || state.clickWorkspaceTemplateManagement(id) ||
+	if state.clickHostOrder(id) || state.clickHostsPanel(id) || state.clickToolbarDockMenu(id) || state.clickWorkspaceTemplateManagement(id) ||
 		state.clickHostGroupActions(id) || state.clickTerminalMenu(id) || state.clickGhostMenu(id) || state.clickTabMenu(id) || state.clickHostMenu(id) || state.clickLocalShellPicker(id) || state.clickSnippetMenu(id) || state.clickSFTPMenu(id) {
 		return
 	}
@@ -2030,6 +2168,7 @@ func (state *State) closeSession(id uint32) {
 	defer memoryTrim.request()
 	session := &state.sessions[index]
 	session.closeSSHBrowser()
+	session.stopRemoteLogs()
 	state.leaveLocalProxy(session)
 	if session.transferBusy() {
 		state.abandonTransfer(session)
@@ -2044,6 +2183,7 @@ func (state *State) closeSession(id uint32) {
 		releaseShell(session.term.shell)
 	}
 	session.term.abandonShell()
+	session.term.stopIdleKeepAlive()
 	state.dropExternalEdits(session.ID)
 	state.closeSFTPTabForSource(session.ID)
 	state.closeCompletionPath(session)
@@ -2226,6 +2366,7 @@ func (state *State) clickHostDialog(id gfx.ID) {
 func (state *State) openHostDialog() {
 	state.cancelHostTest()
 	state.editor.reset()
+	state.editor.agentAccess = state.effectiveAgentHostMode() == agentHostModeAll
 	state.hostDialogMode = hostDialogAdd
 	state.hostDialogID = 0
 	state.dialogError = ""
@@ -2378,6 +2519,19 @@ func (state *State) hostForRow(id gfx.ID) (Host, bool) {
 // Pointer handles the pointer events the runtime does not turn into clicks. A
 // double click on a host row connects to it.
 func (state *State) Pointer(event gfx.PointerEvent) (outcome gfx.EventResult) {
+	// A drag owns the pointer from the press it captures to its release: the
+	// panes may change size on every motion, and the shells wait for the end.
+	switch event.Kind {
+	case gfx.PointerDown, gfx.PointerMove:
+		if event.Captured {
+			state.pointerHeld = true
+		}
+	case gfx.PointerUp, gfx.PointerExit:
+		if state.pointerHeld {
+			state.pointerHeld = false
+			state.flushShellSizes()
+		}
+	}
 	if state.noteExit != nil {
 		if isNoteExitHit(event.Target) {
 			return gfx.EventResult{}
@@ -2385,6 +2539,9 @@ func (state *State) Pointer(event gfx.PointerEvent) (outcome gfx.EventResult) {
 		return gfx.EventResult{Handled: true}
 	}
 	defer state.afterEvent(&outcome)
+	if state.modal == modalPasteReview {
+		return state.pasteReview.code.Pointer(event)
+	}
 	if state.trackHostListBar(event) {
 		defer func() { outcome.Repaint = true }()
 	}
@@ -2399,10 +2556,16 @@ func (state *State) Pointer(event gfx.PointerEvent) (outcome gfx.EventResult) {
 			return gfx.EventResult{Handled: true, Focus: hitTabInline, Repaint: true}
 		}
 	}
+	if result := state.remoteLogResize(event); result.Handled {
+		return result
+	}
 	if result := state.notesPointer(event); result.Handled {
 		return result
 	}
 	if result := state.toolbarDockPointer(event); result.Handled {
+		return result
+	}
+	if result, handled := state.hostsPanelPointer(event); handled {
 		return result
 	}
 	// A mouse toggle changes input routing; return typing to its source terminal.
@@ -2445,6 +2608,12 @@ func (state *State) Pointer(event gfx.PointerEvent) (outcome gfx.EventResult) {
 		return result
 	}
 	if result := state.toolbarSettingsPointer(event); result.Handled {
+		return result
+	}
+	if result := state.sidebarSettingsPointer(event); result.Handled {
+		return result
+	}
+	if result := state.ruleManagerPointer(event); result.Handled {
 		return result
 	}
 	if result := state.sftpColumnSettingsPointer(event); result.Handled {
@@ -2494,6 +2663,9 @@ func (state *State) Pointer(event gfx.PointerEvent) (outcome gfx.EventResult) {
 		return result
 	}
 	if result, handled := state.hostListBarPointer(event); handled {
+		return result
+	}
+	if result, handled := state.hostSidePointer(event); handled {
 		return result
 	}
 	if result, handled := state.hostListPointer(event); handled {
@@ -2664,6 +2836,11 @@ func (state *State) pointer(event gfx.PointerEvent) gfx.EventResult {
 			return result
 		}
 	}
+	if state.modal == modalNewHost && state.editor.iconPicker.control.Open {
+		if result := state.editor.iconPicker.control.Pointer(event); result.Handled {
+			return result
+		}
+	}
 	if state.modal == modalNewHost && state.editor.encodingPicker.control.Open {
 		if event.Kind == gfx.PointerDown && event.Button == gfx.PointerButtonPrimary && !isHostEncodingPickerTarget(event.Target) {
 			state.editor.encodingPicker.control.Open = false
@@ -2687,6 +2864,9 @@ func (state *State) pointer(event gfx.PointerEvent) gfx.EventResult {
 		}
 	}
 	if result, handled := state.proxyPickerPointer(event); handled {
+		return result
+	}
+	if result, handled := state.proxyBatchPickerPointer(event); handled {
 		return result
 	}
 	if result, handled := state.forwardPickerPointer(event); handled {
@@ -2717,6 +2897,9 @@ func (state *State) pointer(event gfx.PointerEvent) gfx.EventResult {
 	if result, handled := state.sftpMenuPointer(event); handled {
 		return result
 	}
+	if result, handled := state.sftpColumnPointer(event); handled {
+		return result
+	}
 	if result, handled := state.sftpRowPointer(event); handled {
 		return result
 	}
@@ -2743,7 +2926,8 @@ func isHostTagsTarget(id gfx.ID) bool {
 // isDialogField reports whether a hit is one of the New Host dialog's text fields.
 func isDialogField(id gfx.ID) bool {
 	switch id {
-	case hitDialogLabel, hitDialogAddress, hitDialogUser, hitDialogPassword, hitDialogPassphrase, hitDialogGroup, hitDialogPort, hitDialogTags:
+	case hitDialogLabel, hitDialogAddress, hitDialogUser, hitDialogPassword, hitDialogPassphrase, hitDialogGroup, hitDialogPort, hitDialogTags,
+		hitDialogIdleInterval, hitDialogIdleCustomInput:
 		return true
 	}
 	return false
@@ -2766,6 +2950,10 @@ func fieldForDialogHit(id gfx.ID) hostField {
 		return fieldGroup
 	case hitDialogTags:
 		return fieldTags
+	case hitDialogIdleInterval:
+		return fieldIdleInterval
+	case hitDialogIdleCustomInput:
+		return fieldIdleInputCustom
 	default:
 		return fieldPort
 	}
@@ -2777,6 +2965,13 @@ func (state *State) Key(event gfx.KeyEvent) (outcome gfx.EventResult) {
 		return state.noteExitKey(event)
 	}
 	defer state.afterEvent(&outcome)
+	if state.modal == modalNone && state.terminalPage() {
+		if view := state.workspaceRemoteLogs(state.deck.ActiveWorkspace()); view != nil && view.formMode == remoteLogFormNone {
+			if result := view.pathSplit.Key(event); result.Handled {
+				return result
+			}
+		}
+	}
 	if result := state.toolbarDockKey(event); result.Handled {
 		return result
 	}
@@ -2784,6 +2979,9 @@ func (state *State) Key(event gfx.KeyEvent) (outcome gfx.EventResult) {
 		return result
 	}
 	if result, handled := state.keyShortcut(event); handled {
+		return result
+	}
+	if result, handled := state.hostsPanelKeyPress(event); handled {
 		return result
 	}
 	if state.tabDrag.active && event.Key == gfx.KeyEscape {
@@ -2852,6 +3050,12 @@ func (state *State) key(event gfx.KeyEvent) gfx.EventResult {
 	if result, handled := state.workspaceArrangementKey(event); handled {
 		return result
 	}
+	if result, handled := state.tabMenuColorKey(event); handled {
+		return result
+	}
+	if result, handled := state.pasteReviewKey(event); handled {
+		return result
+	}
 	if result, handled := state.terminalInputKey(event); handled {
 		return result
 	}
@@ -2906,6 +3110,9 @@ func (state *State) key(event gfx.KeyEvent) gfx.EventResult {
 	if result, handled := state.proxyDialogKey(event); handled {
 		return result
 	}
+	if result, handled := state.proxyBatchDialogKey(event); handled {
+		return result
+	}
 	if result, handled := state.forwardDialogKey(event); handled {
 		return result
 	}
@@ -2934,6 +3141,9 @@ func (state *State) key(event gfx.KeyEvent) gfx.EventResult {
 		return result
 	}
 	if result := state.toolbarSettingsKey(event); result.Handled {
+		return result
+	}
+	if result := state.sidebarSettingsKey(event); result.Handled {
 		return result
 	}
 	if result := state.sftpColumnSettingsKey(event); result.Handled {
@@ -3115,7 +3325,7 @@ func (state *State) key(event gfx.KeyEvent) gfx.EventResult {
 		return gfx.EventResult{Handled: true, Repaint: true}
 	}
 	if state.modal == modalCredential && event.Key == gfx.KeyEnter && !event.Repeat &&
-		(event.Target == hitCredentialName || event.Target == hitCredentialPassword) {
+		(event.Target == hitCredentialName || event.Target == hitCredentialUser || event.Target == hitCredentialPassword) {
 		state.submitCredential()
 		return gfx.EventResult{Handled: true, Repaint: true}
 	}

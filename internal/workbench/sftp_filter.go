@@ -13,7 +13,6 @@ import (
 )
 
 var (
-	sftpHeaderSortHits       = tree.Sub(sftpHits, tree.Name("header-sort"))
 	hitSFTPFilterToggle      = tree.ID(sftpHits, "sftp-filter-toggle")
 	hitSFTPFilter            = tree.ID(sftpHits, "sftp-filter")
 	hitSFTPFilterClear       = tree.ID(sftpHits, "sftp-filter-clear")
@@ -213,7 +212,15 @@ func (state *State) paintSFTPHeaderMenu(canvas *gfx.Canvas, viewport gfx.Rect, a
 	}
 	dismiss := hitSFTPHeaderMenuDismiss
 	const menuWidth = float32(280)
-	rows := 10 + len(folder.history.recent)
+	// Follow already has a permanent entry below.
+	var overflow []barTool
+	for _, tool := range state.chrome.sftpPanel.overflowTools {
+		if tool.id != hitSFTPFollowToggle {
+			overflow = append(overflow, tool)
+		}
+	}
+	rows := 7 + len(folder.history.recent)
+	rows += len(overflow)
 	if label, _ := state.sftpEditorItem(view, folder); label != "" {
 		rows++
 	}
@@ -224,10 +231,18 @@ func (state *State) paintSFTPHeaderMenu(canvas *gfx.Canvas, viewport gfx.Rect, a
 		Viewport: viewport, Scroll: state.menuScrollFor(dismiss),
 	})
 	state.menuPlaced(menu.Bounds())
+	for _, tool := range overflow {
+		menu.AddItem(components.DropdownMenuItem{
+			ID: tool.id, Label: tool.hint, Icon: lucideIcons[tool.icon], Disabled: tool.disabled,
+		})
+	}
+	if len(overflow) > 0 {
+		menu.AddSeparator()
+	}
 	state.paintSFTPHistoryMenu(&menu, view, view.local, hitSFTPHistoryBack, hitSFTPHistoryForward, sftpRecentHits)
 	menu.AddItem(components.DropdownMenuItem{
 		ID: hitSFTPHeaderFilter, Label: state.messages.Tools.FilesFilterLabel, Icon: lucideIcons[iconSearch],
-		Selected: folder.filterOpen || folder.filterInputEditor().String() != "",
+		Kind: components.DropdownMenuCheckbox, Checked: folder.filterOpen || folder.filterInputEditor().String() != "",
 	})
 	hiddenIcon, hiddenLabel := iconEyeOff, state.messages.Tools.FilesShowHidden
 	if folder.showHidden {
@@ -235,11 +250,11 @@ func (state *State) paintSFTPHeaderMenu(canvas *gfx.Canvas, viewport gfx.Rect, a
 	}
 	menu.AddItem(components.DropdownMenuItem{
 		ID: hitSFTPHeaderHidden, Label: hiddenLabel, Icon: lucideIcons[hiddenIcon],
-		Selected: folder.showHidden,
+		Kind: components.DropdownMenuCheckbox, Checked: folder.showHidden,
 	})
 	menu.AddItem(components.DropdownMenuItem{
 		ID: hitSFTPHeaderFollow, Label: state.messages.Tools.FilesFollow, Icon: lucideIcons[iconFollowFolder],
-		Selected: !state.sftpFollowOff,
+		Kind: components.DropdownMenuCheckbox, Checked: !state.sftpFollowOff,
 	})
 	if label, disabled := state.sftpEditorItem(view, folder); label != "" {
 		menu.AddItem(components.DropdownMenuItem{ID: hitSFTPHeaderEditor, Label: label, Icon: lucideIcons[iconExternal], Disabled: disabled})
@@ -249,27 +264,6 @@ func (state *State) paintSFTPHeaderMenu(canvas *gfx.Canvas, viewport gfx.Rect, a
 		ID: hitSFTPCalculateDirectorySize, Label: state.messages.SFTPWindow.CalculateDirectorySize, Icon: lucideIcons[iconInfo],
 		Disabled: folder.path == "" || !view.local && view.openFiles == nil,
 	})
-	for _, entry := range state.sftpColumns.entries {
-		if !entry.Enabled {
-			continue
-		}
-		column, label := int(entry.Key), state.messages.SFTPWindow.Name
-		switch entry.Key {
-		case sftpColumnSize:
-			label = state.messages.SFTPWindow.Size
-		case sftpColumnModified:
-			label = state.messages.SFTPWindow.Modified
-		}
-		icon := uint8(iconArrowUp)
-		if folder.sortOrder.descending {
-			icon = iconChevronDown
-		}
-		item := components.DropdownMenuItem{ID: sftpHeaderSortHits.At(column), Label: label, Selected: folder.sortOrder.column == column}
-		if item.Selected {
-			item.Icon = lucideIcons[icon]
-		}
-		menu.AddItem(item)
-	}
 	menu.End()
 }
 

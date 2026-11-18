@@ -163,11 +163,24 @@ func main() {
 			remoteForwards := newRemoteForwardSet(conn)
 			defer remoteForwards.Close()
 			go remoteForwards.Serve(requests)
+			// E2E_ONE_SESSION=1 serves one session channel per connection: the
+			// first channel claims the transport, and a later one is refused as
+			// an embedded SSH server that binds a connection to its first
+			// service does. Motty must then carry the files on a connection of
+			// their own.
+			oneSession := os.Getenv("E2E_ONE_SESSION") == "1"
+			usedSession := false
 			for newChannel := range channels {
 				switch newChannel.ChannelType() {
 				case "session":
+					if oneSession && usedSession {
+						log.Printf("session-refused %s", newChannel.ChannelType())
+						newChannel.Reject(ssh.Prohibited, "open failed")
+						continue
+					}
 					channel, reqs, err := newChannel.Accept()
 					if err == nil {
+						usedSession = oneSession
 						go serve(conn, fixture.sftpRoot, channel, reqs)
 					}
 				case "direct-tcpip":
@@ -433,18 +446,24 @@ func serve(sshConn ssh.Conn, sftpRoot string, channel ssh.Channel, requests <-ch
 						return
 					}
 					go func() { io.Copy(ptmx, channel) }()
-					io.Copy(channel, ptmx)
-					status := uint32(0)
-					if err := command.Wait(); err != nil {
-						status = 1
-						var exit *exec.ExitError
-						if errors.As(err, &exit) {
-							status = uint32(exit.ExitCode())
+					// The output copy runs beside the request loop, as it does for
+					// a plain shell: an sshd keeps answering window-change while
+					// the command owns the pty, and the client's startup shim is
+					// the shell it resizes.
+					go func() {
+						io.Copy(channel, ptmx)
+						status := uint32(0)
+						if err := command.Wait(); err != nil {
+							status = 1
+							var exit *exec.ExitError
+							if errors.As(err, &exit) {
+								status = uint32(exit.ExitCode())
+							}
 						}
-					}
-					channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
-					channel.Close()
-					return
+						channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
+						channel.Close()
+					}()
+					continue
 				}
 				command.Stdout, command.Stderr = channel, channel
 				status := uint32(0)

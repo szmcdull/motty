@@ -65,8 +65,10 @@ type Backend interface {
 	Sessions(ctx context.Context) ([]SessionInfo, error)
 	ReadTerminal(ctx context.Context, args tools.TerminalReadArgs) (string, error)
 	Exec(ctx context.Context, args tools.TerminalExecArgs) (ExecResult, error)
-	// JobStart types a command into the session's terminal and returns at once.
-	// The job belongs to OutputOwner(ctx); JobPoll and JobStop refuse any other.
+	// JobStart starts a command in the session and returns at once, giving the
+	// job id later calls use. Whether it runs in a terminal or on a connection
+	// of its own is the backend's. The job belongs to OutputOwner(ctx); JobPoll
+	// and JobStop refuse any other.
 	JobStart(ctx context.Context, args tools.TerminalStartArgs) (JobStatus, error)
 	JobPoll(ctx context.Context, args tools.TerminalPollArgs) (JobStatus, error)
 	JobStop(ctx context.Context, args tools.TerminalStopArgs) (JobStatus, error)
@@ -104,21 +106,27 @@ const (
 	// ModeAuto skips questions up to the policy's level like ModeAsk but also
 	// runs medium actions; high and critical still ask.
 	ModeAuto
-	// ModeAllowAll skips approvals, including cross-connection approvals, but
-	// preserves explicit policy blocks. Callers
-	// must obtain explicit consent before enabling this mode.
+	// ModeAllowAll skips approvals, including for a referenced connection, but
+	// preserves explicit policy blocks. Callers must obtain explicit consent
+	// before enabling this mode.
 	ModeAllowAll
 )
 
 // Gate decides and runs tool calls.
 type Gate struct {
-	// NotesEnabled is set only by the in-app Agent, never external MCP.
+	// NotesEnabled makes the note tools reachable through a backend that
+	// implements NotesBackend: the in-app agent and the external servers that
+	// offer the library.
 	NotesEnabled bool
-	Backend      Backend
-	Policy       risk.Policy
-	Mode         Mode
-	Approver     Approver // nil means nothing that needs approval can run
-	Outputs      *OutputStore
+	// NotesWriteFullAccess refuses note_edit outside ModeAllowAll. The external
+	// doors set it; the in-app agent leaves it false because its edits follow
+	// the user's explicit request, not the MCP access level.
+	NotesWriteFullAccess bool
+	Backend              Backend
+	Policy               risk.Policy
+	Mode                 Mode
+	Approver             Approver // nil means nothing that needs approval can run
+	Outputs              *OutputStore
 	// Target is an in-app request's immutable default. References contains only
 	// sessions explicitly mentioned in this question. Nil Target retains the
 	// external MCP contract; references never change the default.
@@ -541,7 +549,11 @@ func (g Gate) execMany(ctx context.Context, name string, args tools.TerminalExec
 }
 
 // ask applies the policy and, when needed, the user's answer. It returns nil
-// when the action may proceed and the result to send back otherwise.
+// when the action may proceed and the result to send back otherwise. The
+// request's locked target set decides which sessions a call may reach; the
+// risk policy alone decides whether it runs without asking, on the default and
+// on a referenced connection alike. An approval always names the target it is
+// about.
 func (g Gate) ask(ctx context.Context, tool string, kind tools.Kind, session, summary string, assessment risk.Assessment, otherSessions ...string) *Result {
 	policy := g.Policy
 	if g.Mode == ModeAuto && policy.AutoUpTo < risk.Medium {
@@ -552,17 +564,6 @@ func (g Gate) ask(ctx context.Context, tool string, kind tools.Kind, session, su
 	// approval, including references; it never overrides a hard policy block.
 	if g.Mode == ModeAllowAll && decision != risk.DecisionBlock {
 		return nil
-	}
-	if g.Target != nil && decision == risk.DecisionAuto {
-		crossTarget := session != g.Target.ID
-		for _, id := range otherSessions {
-			crossTarget = crossTarget || id != g.Target.ID
-		}
-		// A reference alone is not permission to execute or modify that host.
-		// Use the existing approval even for low-risk cross-connection commands.
-		if crossTarget {
-			decision = risk.DecisionAsk
-		}
 	}
 	switch decision {
 	case risk.DecisionAuto:

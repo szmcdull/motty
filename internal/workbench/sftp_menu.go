@@ -22,6 +22,7 @@ var (
 	hitSFTPMenuRename       = tree.ID(sftpMenuHits, "sftp-menu-rename")
 	hitSFTPMenuMove         = tree.ID(sftpMenuHits, "sftp-menu-move")
 	hitSFTPMenuChmod        = tree.ID(sftpMenuHits, "sftp-menu-chmod")
+	hitSFTPMenuChown        = tree.ID(sftpMenuHits, "sftp-menu-chown")
 	hitSFTPMenuExtract      = tree.ID(sftpMenuHits, "sftp-menu-extract")
 	hitSFTPMenuCompress     = tree.ID(sftpMenuHits, "sftp-menu-compress")
 	hitSFTPMenuDelete       = tree.ID(sftpMenuHits, "sftp-menu-delete")
@@ -51,6 +52,8 @@ func sftpMenuAction(id gfx.ID) (gfx.ID, bool) {
 		return hitSFTPMove, true
 	case hitSFTPMenuChmod:
 		return hitSFTPChmod, true
+	case hitSFTPMenuChown:
+		return hitSFTPChown, true
 	case hitSFTPMenuExtract:
 		return hitSFTPExtract, true
 	case hitSFTPMenuCompress:
@@ -99,8 +102,10 @@ func (state *State) sftpMenuPointer(event gfx.PointerEvent) (gfx.EventResult, bo
 	}
 	background := event.Target == hitSFTPListBackground
 	if background && event.Button == gfx.PointerButtonPrimary {
-		// A press on the list background still takes focus out of the path field.
-		return gfx.EventResult{Handled: true, Repaint: true, Blur: true}, true
+		// The list's background is a focus target: the press itself moves the
+		// keyboard there, out of the path field or the terminal, and Ctrl+V then
+		// pastes into the folder the list shows.
+		return gfx.EventResult{Handled: true, Repaint: true}, true
 	}
 	if event.Button != gfx.PointerButtonSecondary {
 		return gfx.EventResult{}, false
@@ -211,6 +216,9 @@ func (state *State) sftpMenuRows(session *Session, view *sftpView) menuRows {
 	}
 	if one && !local {
 		rows.add(components.ContextMenuItem{ID: hitSFTPMenuChmod, Label: messages.SFTPPermissions, Icon: icon(iconLock), Disabled: busy})
+		if sftpOwnershipAvailable(session, view) {
+			rows.add(components.ContextMenuItem{ID: hitSFTPMenuChown, Label: messages.SFTPOwnership, Icon: icon(iconWrench), Disabled: busy})
+		}
 		if _, archive := state.selectedArchive(session, view); archive {
 			rows.add(components.ContextMenuItem{ID: hitSFTPMenuExtract, Label: messages.Tools.Extract, Icon: icon(iconArchive), Disabled: busy})
 		}
@@ -232,12 +240,12 @@ func (state *State) sftpMenuRows(session *Session, view *sftpView) menuRows {
 	if count > 0 {
 		rows.add(components.ContextMenuItem{ID: hitSFTPMenuCopyFiles, Label: messages.SFTPWindow.CopyFiles, Icon: icon(iconCopy), Disabled: busy || view.active().searching()})
 	}
-	// A local side pastes the server files this panel copied; the server side
-	// pastes the files the system clipboard holds, which is only known once the
-	// paste runs.
+	// A local side pastes the server files copied last, from any server; the
+	// server side pastes them too, or the files the system clipboard holds,
+	// which is only known once the paste runs.
 	paste := view.worker != nil
 	if local {
-		paste = len(view.clipboard.entries) > 0
+		paste = !state.sftpRemoteClipboard().empty()
 	}
 	rows.add(components.ContextMenuItem{ID: hitSFTPMenuPasteFiles, Label: messages.SFTPWindow.PasteFiles, Icon: icon(iconPaste), Disabled: busy || view.busy || view.worker == nil || !paste || view.active().searching()})
 	if count > 0 {

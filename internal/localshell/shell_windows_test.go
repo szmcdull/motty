@@ -5,7 +5,9 @@ package localshell
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -139,9 +141,74 @@ func TestConPTYCloseEndsARunningProgram(t *testing.T) {
 	}
 }
 
+// A process created with CREATE_NEW_PROCESS_GROUP, or by one that ignores
+// Ctrl+C, passes that state on to its children. A terminal started that way
+// must still let Ctrl+C reach the program on the pseudo console: the update
+// helper used to restart the application like that (issue 804).
+func TestConPTYCtrlCInterruptsAProgramInAnInheritedCtrlCDisabledGroup(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(executable, "-test.run=^TestConPTYCtrlCChild$")
+	command.Env = append(os.Environ(), "MOTTY_TEST_CTRL_C_CHILD=1")
+	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the child failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "CTRL-C-CHILD-OK") {
+		t.Fatalf("the child did not finish its check:\n%s", output)
+	}
+}
+
+func TestConPTYCtrlCChild(t *testing.T) {
+	if os.Getenv("MOTTY_TEST_CTRL_C_CHILD") != "1" {
+		t.Skip("ConPTY child only")
+	}
+	shell, wakes := startWindows(t, Config{})
+	shell.Write([]byte("ping -n 60 127.0.0.1\r\n"))
+	untilWindows(t, shell, wakes, "TTL=")
+	// The child test only proves the point if the program keeps running until
+	// the interrupt arrives; 60 pings outlast the waits below.
+	shell.Write([]byte{3})
+	shell.Write([]byte("echo ctrlc-%OS%\r\n"))
+	untilWindows(t, shell, wakes, "ctrlc-Windows_NT")
+	fmt.Println("CTRL-C-CHILD-OK")
+}
+
 func TestConPTYStartsInTheRequestedDirectory(t *testing.T) {
 	dir := t.TempDir()
 	shell, wakes := startWindows(t, Config{Dir: dir})
 	shell.Write([]byte("cd\r\n"))
 	untilWindows(t, shell, wakes, dir)
+}
+
+func TestForegroundArgsNamesTheRunningCommand(t *testing.T) {
+	shell, _ := startWindows(t, Config{})
+	if !shell.Write([]byte("ping -n 30 127.0.0.1\r\n")) {
+		t.Fatal("Write refused")
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		args, ok := shell.ForegroundArgs()
+		for _, arg := range args {
+			if ok && strings.Contains(strings.ToLower(arg), "ping") {
+				return
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	args, ok := shell.ForegroundArgs()
+	t.Fatalf("foreground = %q (ok %v), want ping", args, ok)
+}
+
+func TestForegroundArgsIsTheShellAtItsPrompt(t *testing.T) {
+	shell, wakes := startWindows(t, Config{})
+	shell.Write([]byte("echo ready\r\n"))
+	untilWindows(t, shell, wakes, "ready")
+	args, ok := shell.ForegroundArgs()
+	if !ok || len(args) == 0 || !strings.Contains(strings.ToLower(args[0]), "cmd") {
+		t.Fatalf("foreground = %q (ok %v), want cmd", args, ok)
+	}
 }

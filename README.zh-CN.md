@@ -129,9 +129,10 @@ Windows 便携版在有签名更新时也可原地升级，并保留 `motty-data
 Windows 下可在 **设置 → 终端 → 本地 Shell**（“行内建议”下方）的下拉框中选择
 本地终端使用的 Shell。Motty 会从 PATH 和常见安装目录中自动检测 PowerShell、
 CMD、Git Bash 等已安装的 Shell，并把每个已安装的 WSL 发行版列为单独的选项。
-选择 WSL 发行版后，文件面板同样会跟随终端所在目录（经由发行版的
-`\\wsl.localhost` 共享访问）。请在这里选择发行版，而不是在 PowerShell 里输入
-`wsl`：只有 Motty 自己启动的 Shell 才能上报所在目录。此配置仅保存在本机，对新建或重连的本地终端生效。
+选择某个 Shell 后，标签页和侧边栏显示它自己的图标，WSL 发行版显示其 logo；
+文件面板直接打开在发行版的文件系统中（经由发行版的 `\\wsl.localhost` 共享访问），
+并跟随终端所在目录，资源监控也读取发行版内部的数据。请在这里选择发行版，而不是在
+PowerShell 里输入 `wsl`：只有 Motty 自己启动的 Shell 才能上报所在目录。此配置仅保存在本机，对新建或重连的本地终端生效。
 
 | 操作 | macOS | Windows / Linux |
 | --- | --- | --- |
@@ -184,14 +185,22 @@ win32-input-mode。连字在固定网格内按单元格整形。标签可以重�
 在案就直接连接；未知证书像未知密钥一样弹出指纹确认。主机还可以把本地 ssh-agent
 转发给远端 shell，按主机开关，默认关闭。
 
+硬件安全密钥（`sk-ssh-ed25519`、`sk-ecdsa-sha2-nistp256`）通过 OpenSSH 的 agent
+和 `ssh-sk-helper` 认证。使用这类密钥连接时，Motty 会为本次连接启动一个临时
+agent，用 `ssh-add` 载入密钥，并在窗口里显示 PIN 或口令提示；密钥列表会把它标为
+「安全密钥」。要求与限制见 [安全密钥](docs/security-keys.md)。
+
 主机可以分组、打标签、搜索，也可以从 OpenSSH config、PuTTY、Xshell、MobaXterm、
-WindTerm、Electerm、Netcatty 导入。TOTP/HOTP 种子可以存入保险库并自动填充。密码和私钥口令
+WindTerm、Electerm、Netcatty、SecureCRT 导入。TOTP/HOTP 种子可以存入保险库并自动填充。密码和私钥口令
 进入 AES-256-GCM 保险库，跟随各自的主机；密钥放在系统密钥存储，没有时（以及便携版）放在保险库旁的密钥文件里。
 Electerm 和 Netcatty 的明文 SSH 密码可在明确确认后导入；重新导入只补齐缺失密码。
+SecureCRT 的保存密码是加密的，导入只包含连接。
 
 OpenSSH 配置导入和同步会保留每台主机的 `ServerAliveInterval`、
 `ServerAliveCountMax`、`IdentitiesOnly` 和指定的身份文件。显式设置间隔为 0
 会关闭该主机的保活；限制身份时仍可使用 SSH agent 中匹配的密钥，但不会尝试其他 agent 密钥。
+使用自动认证的主机也可以在编辑器的“高级选项”里开启同样的限制：agent 只提供与已配置
+身份匹配的密钥，避免 agent 中密钥过多时在本地密钥之前耗尽服务器的认证次数。
 
 ### 文件不用另开应用
 
@@ -236,6 +245,8 @@ Hextile/ZRLE、桌面尺寸变化、指针、键盘和文本剪贴板。RDP 使�
 可选 MCP 服务器把同样的工具交给外部 agent：默认关闭、只监听 loopback、要求
 bearer token，支持 observe 和 ask 两种模式。`motty mcp-serve` 是不开窗口的同类做法：
 agent 通过 stdio 启动它，它只使用你对 agent 开放的主机，没有端口，也没有 token。
+两个 MCP 入口都提供后台任务：`terminal_start` 立即返回任务号，`terminal_poll` 按偏移
+读取已经打印的内容，`terminal_stop` 结束命令，长命令不会阻塞对话。
 `list_hosts` 查询已对 agent 开放的保存 SSH 主机（无需连接），返回稳定的主机 ID、名称和地址；
 窗口版 HTTP MCP 与独立 stdio MCP 都不会列出未授权主机。窗口版 `list_sessions` 只列出
 打开的终端会话，其会话 ID 与主机 ID 不同；独立服务的 `list_sessions` 仍以主机 ID

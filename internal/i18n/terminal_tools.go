@@ -240,6 +240,12 @@ type ToolsMessages struct {
 	FontPickerSampleSymbols string
 	FontPickerConfirm       string
 
+	// The two weights an interface font is chosen by: the weight its main text
+	// is drawn at, the weight its bold text is drawn at, and the family's own.
+	FontWeightMain    string
+	FontWeightBold    string
+	FontWeightDefault string
+
 	// The fonts that draw what the terminal's font lacks.
 	FontFallbackRow         string
 	FontFallbackEmpty       string
@@ -259,6 +265,8 @@ type ToolsMessages struct {
 	PasteImageDoneFmt       string // the path on the server
 	PasteImageFailedFmt     string // the reason
 	PasteImageTooLarge      string
+	PasteConfirmRow         string
+	PasteConfirmDescription string
 	PasswordHintRow         string
 	PasswordHintDescription string
 	CloseConfirmRow         string
@@ -298,12 +306,13 @@ type ToolsMessages struct {
 	HostProxyPasswordNotCarried string
 	// The host form's jump route row: whether the host is reached through
 	// another, and the way to add or edit that route.
-	HostJumpRow                    string
-	HostJumpDescriptionDirect      string
-	HostJumpDescriptionFmt         string // the jump host's label
-	HostJumpDescriptionUnsaved     string
-	HostJumpDescriptionUnavailable string
-	HostJumpDescriptionMissing     string
+	HostJumpRow                           string
+	HostJumpDescriptionDirect             string
+	HostJumpDescriptionFmt                string // the jump host's label
+	HostJumpDescriptionUnsaved            string
+	HostJumpDescriptionUnavailable        string
+	HostJumpDescriptionUnavailableDesktop string
+	HostJumpDescriptionMissing            string
 
 	// A proxy command: a local program that carries a host's first connection.
 	ProxyCommand                   string
@@ -333,6 +342,7 @@ type ToolsMessages struct {
 	ImportGuide                  string // the link to the docs on exporting from each client
 	ImportGuideURL               string
 	ImportPickerFmt              string // the client's name
+	ImportFolderPickerFmt        string // the client's name; it keeps sessions in a folder
 	ImportCanceled               string
 	ImportFailedFmt              string
 	ImportSummaryFmt             string // hosts, client, duplicates
@@ -474,6 +484,8 @@ type ToolsMessages struct {
 	FilesKeepTimesDescription       string
 	FilesFollow                     string
 	FilesFollowDescription          string
+	FilesLocateTerminal             string
+	FilesLocateTerminalSkipped      string
 	FilesTerminalFollow             string
 	FilesTerminalFollowDescription  string
 	FilesTerminalFollowSkipped      string
@@ -717,6 +729,7 @@ type ToolsMessages struct {
 	SyncFailedFmt                   string
 	SyncErrUnauthorized             string
 	SyncErrNotFound                 string
+	SyncErrChanged                  string
 	SyncErrInsecure                 string
 	SyncAllowInsecureHTTP           string
 	SyncInsecureHTTPDescription     string
@@ -727,6 +740,33 @@ type ToolsMessages struct {
 	SyncConfigureGist               string
 	SyncConfigureGitee              string
 	SyncErrTooLarge                 string
+	SyncScopeGroup                  string
+	SyncScopeDescription            string
+	SyncErrNothingSelected          string
+	SyncScopeHosts                  string
+	SyncScopeHostsDescription       string
+	SyncScopeSettings               string
+	SyncScopeSettingsDescription    string
+	SyncScopeNotes                  string
+	SyncScopeNotesDescription       string
+	SyncScopeSnippets               string
+	SyncScopeSnippetsDescription    string
+	SyncScopeRoutes                 string
+	SyncScopeRoutesDescription      string
+	SyncScopeForwards               string
+	SyncScopeForwardsDescription    string
+	SyncScopeWorkspaces             string
+	SyncScopeWorkspacesDescription  string
+	SyncScopeCredentials            string
+	SyncScopeCredentialsDescription string
+	SyncScopeKeys                   string
+	SyncScopeKeysDescription        string
+	SyncScopeAI                     string
+	SyncScopeAIDescription          string
+	SyncScopeRules                  string
+	SyncScopeRulesDescription       string
+	SyncScopeKnownHosts             string
+	SyncScopeKnownHostsDescription  string
 	S3DialogTitle                   string
 	S3DialogDescription             string
 	S3Endpoint                      string
@@ -736,6 +776,7 @@ type ToolsMessages struct {
 	S3PathStyle                     string
 	S3LoginTitle                    string
 	S3LoginDescription              string
+	S3Next, S3Back, S3Stop          string
 	S3AccessKey                     string
 	S3Secret                        string
 	S3ErrFields                     string
@@ -928,6 +969,7 @@ type ToolsMessages struct {
 	ExtEditReplace                  string
 	HostViewList                    string
 	HostViewGrid                    string
+	HostViewTree                    string
 	HostSort                        string
 	HostSortDone                    string
 	HostPrivacy                     string
@@ -984,6 +1026,8 @@ type ToolsMessages struct {
 	InteractiveOnly                 string
 	AgentAccess                     string
 	AgentAccessNote                 string
+	IdentitiesOnly                  string
+	IdentitiesOnlyNote              string
 	AdvancedSession                 string
 	AdvancedAgents                  string
 	AgentForwardUnavailableFmt      string
@@ -1007,6 +1051,24 @@ type ToolsMessages struct {
 	LoginCommandField               string
 	LoginCommandPlaceholder         string
 	ErrLoginCommand                 string
+	IdleKeepAliveHeading            string
+	IdleKeepAliveField              string
+	IdleKeepAliveOff                string
+	IdleKeepAliveOneMinute          string
+	IdleKeepAliveFiveMinutes        string
+	IdleKeepAliveTenMinutes         string
+	IdleKeepAliveCustom             string
+	IdleKeepAliveCustomInterval     string
+	IdleKeepAliveUnitSeconds        string
+	IdleKeepAliveUnitMinutes        string
+	IdleKeepAliveInputField         string
+	IdleKeepAliveInputCR            string
+	IdleKeepAliveInputNUL           string
+	IdleKeepAliveInputCustom        string
+	IdleKeepAliveCustomInput        string
+	IdleKeepAliveCustomPlaceholder  string
+	ErrIdleKeepAliveInterval        string
+	ErrIdleKeepAliveInput           string
 	ErrAlgoUnknownFmt               string
 	AlgoWeakFmt                     string
 	AlgoNegotiatedFmt               string
@@ -1027,6 +1089,7 @@ type ToolsMessages struct {
 	FilesColumnsReset                    string
 	FilesColumnsClose                    string
 	FilesDownloadDirectory               string
+	FilesResizeColumn                    string
 	FilesDownloadAskDescription          string
 	FilesDownloadCurrentFmt              string
 	FilesDownloadChoose                  string

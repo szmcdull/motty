@@ -152,6 +152,10 @@ func (state *State) windowDockTool(spec toolbarSpec) barTool {
 		if state.transfers.open {
 			tool.style = iconButtonActive
 		}
+	case hitHostsPanel:
+		if state.hostsPanelVisible() {
+			tool.style = iconButtonActive
+		}
 	case hitAIToggle:
 		if state.aiPanelVisible() {
 			tool.style = iconButtonActive
@@ -244,7 +248,7 @@ func (state *State) toolbarDockTools(zone toolbarDockZone, dst *[maxBarTools]bar
 	if zone == state.defaultToolbarDockZone(toolbarTerminal) && !state.toolbarVisible(toolbarTerminal, hitLocalProxyOpen) {
 		if session, ok := state.terminalSideRailSession(); ok {
 			if snapshot := state.localProxySnapshot(session); snapshot.Phase == localProxyConnecting || snapshot.Phase == localProxyConnected || snapshot.Phase == localProxyFailed {
-				tool := barTool{id: hitLocalProxyOpen, icon: iconGlobe, hint: state.messages.LocalProxy.Title, style: iconButtonActive}
+				tool := barTool{id: hitLocalProxyOpen, icon: iconLocalProxy, hint: state.messages.LocalProxy.Title, style: iconButtonActive}
 				if snapshot.Phase == localProxyConnected && snapshot.RemotePort != 0 {
 					tool.hint = fmt.Sprintf(state.messages.LocalProxy.ConnectedFmt, snapshot.RemotePort)
 				}

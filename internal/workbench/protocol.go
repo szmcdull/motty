@@ -70,6 +70,18 @@ func (state *State) sshHostCount() int {
 	return count
 }
 
+// routeTargetCount is how many hosts a jump route can reach: SSH hosts and
+// remote desktops.
+func (state *State) routeTargetCount() int {
+	count := 0
+	for _, host := range state.hosts {
+		if host.isRouteTarget() {
+			count++
+		}
+	}
+	return count
+}
+
 // defaultPort is the port a host of its protocol uses when it names none.
 func (host Host) defaultPort() uint16 {
 	switch host.Protocol {
@@ -88,6 +100,11 @@ func (host Host) defaultPort() uint16 {
 func (host Host) isDesktop() bool {
 	return host.Protocol == protocolVNC || host.Protocol == protocolRDP
 }
+
+// isRouteTarget reports whether a jump route can reach the host as its target:
+// an SSH host, whose connection the route extends, or a remote desktop, whose
+// port the route's jump host forwards. A jump itself is always an SSH host.
+func (host Host) isRouteTarget() bool { return host.isSSH() || host.isDesktop() }
 
 // tunneled reports whether the host is reached through an SSH connection of its
 // own: a remote desktop whose server is only listening on the SSH server's own
@@ -127,12 +144,15 @@ type savedTransport struct {
 	// the default algorithms; AlgorithmList is the custom list.
 	Algorithms    string `json:"algorithms,omitempty"`
 	AlgorithmList string `json:"algorithm_list,omitempty"`
-	// Authentication is "password", "key" or "agent" when an SSH host does
+	// Authentication is "password", "key", "agent" or "kerberos" when an SSH host does
 	// not use the automatic authentication order. Identity optionally selects
 	// one imported key fingerprint for the key policy.
 	Authentication string                       `json:"authentication,omitempty"`
 	Identity       string                       `json:"identity,omitempty"`
 	SSHOptions     *sshconfig.ConnectionOptions `json:"ssh_options,omitempty"`
+	// IdentitiesOnly is set for an automatic SSH host that offers the
+	// ssh-agent only the keys matching its configured identities.
+	IdentitiesOnly bool `json:"identities_only,omitempty"`
 	// Credential is the id of the saved password an SSH, VNC or RDP host takes
 	// its password from (see credentials.go).
 	Credential string `json:"credential,omitempty"`
@@ -149,6 +169,13 @@ type savedTransport struct {
 	NoHistory bool `json:"no_history,omitempty"`
 	// LoginCommand is the line an SSH host types into its shell after login.
 	LoginCommand string `json:"login_command,omitempty"`
+	// IdleKeepAliveSeconds is how often an idle terminal is sent input; zero is
+	// off. IdleInput is "cr", "nul" or "custom" (empty follows the protocol),
+	// and IdleInputCustom is the escaped text for "custom".
+	IdleKeepAliveSeconds int             `json:"idle_keepalive_seconds,omitempty"`
+	IdleInput            string          `json:"idle_keepalive_input,omitempty"`
+	IdleInputCustom      string          `json:"idle_keepalive_custom,omitempty"`
+	RemoteLogPaths       []remoteLogPath `json:"remote_log_paths,omitempty"`
 	// Transfer is "sftp" or "scp" for an SSH host whose file panel does not
 	// choose by itself.
 	Transfer string `json:"transfer,omitempty"`
@@ -174,6 +201,15 @@ func (host Host) transport() savedTransport {
 	// old record byte-for-byte.
 	if host.Encoding != "" && host.Encoding != charset.UTF8 {
 		transport.Encoding = host.Encoding
+	}
+	// Every terminal protocol keeps this setting, so it is written before the
+	// switch that gives the rest of the transport its protocol-specific shape.
+	if validIdleKeepAliveInterval(host.IdleKeepAlive) {
+		transport.IdleKeepAliveSeconds = int(host.IdleKeepAlive / time.Second)
+	}
+	transport.IdleInput = host.savedIdleInput()
+	if host.IdleInput == idleInputCustom {
+		transport.IdleInputCustom = host.IdleInputCustom
 	}
 	switch host.Protocol {
 	case protocolTelnet:
@@ -204,9 +240,11 @@ func (host Host) transport() savedTransport {
 	transport.Algorithms, transport.AlgorithmList = mode, list
 	transport.Authentication, transport.Identity = host.Auth.saved(), host.Identity
 	transport.SSHOptions = host.SSHOptions.Clone()
+	transport.IdentitiesOnly = host.IdentitiesOnly
 	transport.ForwardX11, transport.AgentForward, transport.NoHistory, transport.Transfer = host.ForwardX11, host.AgentForward, host.NoHistory, host.savedTransfer()
 	transport.InteractiveOnly = host.InteractiveOnly
 	transport.LoginCommand = host.LoginCommand
+	transport.RemoteLogPaths = host.RemoteLogPaths
 	return transport
 }
 
@@ -227,6 +265,7 @@ func (host *Host) applyTransport(transport savedTransport) bool {
 	}
 	host.Encoding = encoding
 	host.Terminal = terminalSSH
+	host.applyIdleKeepAlive(transport)
 	switch transport.Protocol {
 	case "", "ssh":
 		host.Protocol = protocolSSH
@@ -242,11 +281,13 @@ func (host *Host) applyTransport(transport savedTransport) bool {
 		if host.Auth != authPrivateKey {
 			host.Identity = ""
 		}
+		host.IdentitiesOnly = transport.IdentitiesOnly
 		host.ForwardX11 = transport.ForwardX11
 		host.AgentForward = transport.AgentForward
 		host.InteractiveOnly = transport.InteractiveOnly
 		host.NoHistory = transport.NoHistory
 		host.LoginCommand = restoredLoginCommand(transport.LoginCommand)
+		host.RemoteLogPaths = restoreRemoteLogPaths(transport.RemoteLogPaths)
 		switch transport.Terminal {
 		case "", "ssh":
 			host.Terminal = terminalSSH
@@ -602,7 +643,7 @@ func (state *State) sayStreamOpened(session *Session) {
 	case protocolTelnet:
 		session.term.say(sgrWarn, m.TelnetPlaintext)
 	case protocolVNC:
-		protected := session.host.tunneled()
+		protected := session.host.tunneled() || session.desktopTunnel
 		if source, ok := session.conn.(desktopSource); ok && source.Desktop() != nil {
 			protected = protected || source.Desktop().Info().Encrypted
 		}

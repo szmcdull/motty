@@ -35,6 +35,8 @@ var (
 	hitSFTPWindowSudoMode        = tree.ID(sftpWindowRemote, "sudo-mode")
 	hitSFTPWindowHeaderDismiss   = tree.ID(sftpWindowHits, "header-dismiss")
 	sftpWindowPath               = [2]gfx.ID{tree.ID(sftpWindowLocal, "path"), tree.ID(sftpWindowRemote, "path")}
+	sftpWindowPathEdit           = [2]gfx.ID{tree.ID(sftpWindowLocal, "path-edit"), tree.ID(sftpWindowRemote, "path-edit")}
+	sftpWindowBreadcrumbs        = [2]gfx.Scope{tree.Sub(sftpWindowLocal, tree.Name("breadcrumbs")), tree.Sub(sftpWindowRemote, tree.Name("breadcrumbs"))}
 	sftpWindowList               = [2]gfx.ID{tree.ID(sftpWindowLocal, "list"), tree.ID(sftpWindowRemote, "list")}
 	sftpWindowSortHits           = [2]gfx.Scope{tree.Sub(sftpWindowLocal, tree.Name("sort")), tree.Sub(sftpWindowRemote, tree.Name("sort"))}
 	sftpWindowActions            = [2]gfx.Scope{tree.Sub(sftpWindowLocal, tree.Name("actions")), tree.Sub(sftpWindowRemote, tree.Name("actions"))}
@@ -53,7 +55,11 @@ var (
 	hitSFTPWindowMenuDismiss     = tree.ID(sftpWindowHits, "menu-dismiss")
 	hitSFTPWindowMenuCopy        = tree.ID(sftpWindowHits, "menu-copy")
 	hitSFTPWindowQueueBar        = tree.ID(sftpWindowHits, "queue-scroll")
+	sftpWindowQueueActions       = tree.Sub(sftpWindowHits, tree.Name("queue-actions"))
 	sftpWindowQueueRows          = tree.Sub(sftpWindowHits, tree.Name("queue-rows"))
+	sftpWindowQueueStatus        = tree.Sub(sftpWindowHits, tree.Name("queue-status"))
+	hitSFTPQueueDetails          = tree.ID(sftpWindowHits, "queue-details")
+	hitSFTPQueueDetailsDismiss   = tree.ID(sftpWindowHits, "queue-details-dismiss")
 )
 
 type sftpWindowUI struct {
@@ -87,20 +93,27 @@ type sftpWindowUI struct {
 	barGrab      float32
 	treeBarDrag  int // 1: local tree, 2: remote tree; zero when idle
 	treeBarGrab  float32
-	fraction     float32
-	split        components.Resizable
-	splitting    bool
-	tooltip      components.HoverTooltip
-	menuOpen     bool
-	menuAt       gfx.Point
-	queueBounds  gfx.Rect
-	queueOffset  float32
-	queueBar     components.ScrollAreaGeometry
-	// The queue's cards are page elements now; these are the entries drawn and
-	// the scratch their hand-painted parts go into.
-	queueItems          int
-	queueVisible        []*transferEntry
-	queueCards          []transferCard
+	// columnDragging, columnDrag and the fit fields are the file lists' column
+	// dividers. The area and widths the panes last painted are kept for the
+	// pointer, which has no canvas of its own.
+	columnDragging      [2]bool
+	columnDrag          [2]int
+	columnFitPending    [2]bool
+	columnFitDivider    [2]int
+	columnArea          [2]gfx.Rect
+	columnWidths        [2][3]float32
+	fraction            float32
+	split               components.Resizable
+	splitting           bool
+	tooltip             components.HoverTooltip
+	menuOpen            bool
+	menuAt              gfx.Point
+	queueBounds         gfx.Rect
+	queueOffset         float32
+	queueBar            components.ScrollAreaGeometry
+	queueEntries        []int
+	queueRevision       uint64
+	queueDetails        transferDetails
 	sort                [2]sftpWindowSort
 	menuScroll          components.MenuScroll
 	headerAnchor        [2]gfx.Rect
@@ -129,6 +142,7 @@ type sftpWindowScratch struct {
 	// page is not drawn in a page of its own, so it reads its size from here.
 	bounds      gfx.Rect
 	local       bool
+	header      ui.Box
 	address     ui.Box
 	list        ui.Box
 	tree        ui.Box
@@ -197,12 +211,21 @@ func (w *sftpWindow) paint(canvas *gfx.Canvas, size gfx.Size) {
 	if s := &w.ui.panes[sideIndex(!firstLocal)]; s.list.Valid() {
 		w.paintPaneDetails(canvas, s, !firstLocal)
 	}
-	if w.queueCount() > 0 {
-		w.paintQueueDetails(canvas, w.ui.queue)
-	} else {
-		w.ui.queueBounds = gfx.Rect{}
-		w.ui.queueOffset = 0
+	for side := range w.ui.panes {
+		header := w.ui.panes[side].header
+		if !header.Valid() {
+			continue
+		}
+		rect := header.Rect()
+		if rect.Width <= 16 || rect.Height <= 0 {
+			continue
+		}
+		w.ui.columnArea[side] = gfx.Rect{X: rect.X + 8, Y: rect.Y, Width: rect.Width - 16, Height: rect.Height}
+		if w.owner.sftpColumnResizeAvailable() {
+			w.paintColumnDividers(canvas, side)
+		}
 	}
+	w.paintQueue(canvas, w.ui.queue, w.ui.bounds)
 	if w.view.bookmarksOpen {
 		w.paintDirectoryPlaces(canvas)
 	}
@@ -237,10 +260,16 @@ func (w *sftpWindow) paint(canvas *gfx.Canvas, size gfx.Size) {
 	}
 	if w.drag.active {
 		w.paintDrag(canvas)
+	} else if w.foreign.active {
+		w.paintForeignDrag(canvas)
 	}
 	w.notices.paint(canvas, theme, gfx.Rect{Width: size.Width, Height: size.Height})
 	if !w.ui.profileHoverOpen {
 		w.ui.tooltip.Paint(canvas, theme, gfx.Rect{Width: size.Width, Height: size.Height}, components.TooltipOptions{Layer: tooltipLayer, SideOffset: tooltipGap}, components.HoverTooltipDelay)
+	}
+	if !w.pendingFocus.IsZero() {
+		canvas.RequestFocus(w.pendingFocus)
+		w.pendingFocus = gfx.ID{}
 	}
 }
 
@@ -253,10 +282,6 @@ const (
 	sftpWindowGap          = float32(8)
 	sftpWindowStatusHeight = float32(20)
 )
-
-func sftpQueueHeight(size gfx.Size) float32 {
-	return min(244, max(108, size.Height*.28))
-}
 
 // bookmarkDraws makes the handlers that paint the bookmark editor's fields,
 // buttons and lists, once.
@@ -295,7 +320,7 @@ func (w *sftpWindow) declareWindowBody(c ui.C) {
 	}
 	size := w.ui.size
 	bounds := w.windowBodyBounds()
-	queue := w.queueCount() > 0
+	queue := w.queueCount()
 	body, queueRect, status := sftpTabPaneRects(bounds, queue)
 	w.ui.body, w.ui.queue = body, queueRect
 	w.ui.split = components.BeginResizable(nil, w.owner.Theme(), hitSFTPWindowSplit, body, w.ui.fraction).LimitsPx(220, 220)
@@ -308,7 +333,7 @@ func (w *sftpWindow) declareWindowBody(c ui.C) {
 			Left(status.X - bounds.X).Top(status.Y - bounds.Y).Width(status.Width).Height(status.Height).
 			Children(func() { w.declareStatusLine(c) })
 	})
-	if queue {
+	if queue > 0 {
 		w.declareQueue(c, queueRect, gfx.Rect{})
 	}
 	if w.bookmark.open {
@@ -408,8 +433,21 @@ func (w *sftpWindow) paintPaneDetails(canvas *gfx.Canvas, s *sftpWindowScratch, 
 	} else {
 		w.view.places.anchors[0] = s.address.Rect()
 	}
-	value := folder.pathInput().String()
-	components.PaintInput(canvas, theme, s.address.Rect(), components.InputSnapshot{ID: sftpWindowPath[side], Label: m.SFTPWindow.Path, Value: value, Hint: folder.path, Focused: canvas.Focused() == sftpWindowPath[side], PlatformEditing: canvas.Focused() == sftpWindowPath[side]})
+	focused := canvas.Focused() == sftpWindowPath[side]
+	if folder.pathEditing && !w.owner.sftpPathInput && !focused {
+		folder.pathEditing = false
+		folder.resetPathInput()
+	}
+	if w.owner.sftpPathVisible(folder) {
+		value := folder.pathInput().String()
+		// Only the server pane waits for the server. The local pane is not
+		// listing while a remote navigation is pending, and a window-wide flag
+		// would blank a focused local field and stop it accepting input.
+		readOnly := !local && w.view.busy
+		components.PaintInput(canvas, theme, s.address.Rect(), components.InputSnapshot{ID: sftpWindowPath[side], Label: m.SFTPWindow.Path, Value: value, Hint: folder.path, Focused: focused, PlatformEditing: focused && !readOnly && value != "", ReadOnly: readOnly})
+	} else {
+		w.owner.paintSFTPFolderBreadcrumbs(canvas, s.address.Rect(), folder.crumbs, sftpWindowPathEdit[side], sftpWindowBreadcrumbs[side])
+	}
 	listBounds := s.list.Rect()
 	if s.treeSet {
 		treeBounds := s.tree.Rect()
@@ -459,10 +497,23 @@ func (w *sftpWindow) paintPaneDetails(canvas *gfx.Canvas, s *sftpWindowScratch, 
 // side even when the panes swap places.
 func (w *sftpWindow) declarePane(c ui.C, s *sftpWindowScratch) {
 	local := s.local
+	side := sideIndex(local)
 	folder := w.folder(local)
 	theme, m := w.owner.Theme(), w.owner.messages
 	bounds := s.bounds
 	compact := bounds.Height < 230
+	resizable := w.owner.sftpColumnResizeAvailable()
+	var columns sftpColumnMetrics
+	if resizable {
+		columnAreaWidth := max(bounds.Width-32, 0)
+		columns = w.owner.sftpColumnMetrics(columnAreaWidth, sftpColumnNameGap)
+		if w.ui.columnFitPending[side] {
+			fit := w.owner.sftpColumnFitWidth(folder, c.Canvas(), w.ui.columnFitDivider[side])
+			columns = w.owner.applySFTPColumnFit(columns, w.ui.columnFitDivider[side], fit)
+			w.ui.columnFitPending[side] = false
+		}
+		w.ui.columnWidths[side] = [3]float32{columns.name, columns.size, columns.modified}
+	}
 	icon := func(id gfx.ID, glyph uint8, hint string, disabled bool, style iconButtonStyle) {
 		s.buttons[s.buttonCount] = sftpIconButton{box: w.owner.declareIconButton(c, id, glyph, hint, disabled, style).Size(28, 28), id: id}
 		s.buttonCount++
@@ -535,7 +586,8 @@ func (w *sftpWindow) declarePane(c ui.C, s *sftpWindowScratch) {
 		if local {
 			w.owner.declareLocalCoverage(c, folder, hitSFTPWindowCoverage)
 		}
-		ui.Row(c).Height(20).Gap(8).PadX(8).Items(ui.Center).Children(func() {
+		s.header = ui.Row(c).Height(20).Gap(8).PadX(8).Items(ui.Center)
+		s.header.Children(func() {
 			for _, entry := range w.owner.sftpColumns.entries {
 				if !entry.Enabled {
 					continue
@@ -547,20 +599,32 @@ func (w *sftpWindow) declarePane(c ui.C, s *sftpWindowScratch) {
 				case sftpColumnModified:
 					label = m.SFTPWindow.Modified
 				}
-				if w.ui.sort[sideIndex(local)].column == column {
-					if w.ui.sort[sideIndex(local)].descending {
+				if w.ui.sort[side].column == column {
+					if w.ui.sort[side].descending {
 						label += " ↓"
 					} else {
 						label += " ↑"
 					}
 				}
-				box := ui.Text(c, label).FontSize(theme.Metrics.FontSizeS).Color(theme.MutedForeground).Ellipsis().HitWith(sftpWindowSortHits[sideIndex(local)].At(column), label, gfx.HitOptions{Role: gfx.RoleButton})
+				box := ui.Text(c, label).FontSize(theme.Metrics.FontSizeS).Color(theme.MutedForeground).Ellipsis().HitWith(sftpWindowSortHits[side].At(column), label, gfx.HitOptions{Role: gfx.RoleButton})
 				if column == 0 {
-					box.Grow(1)
+					if resizable {
+						box.Width(columns.name)
+					} else {
+						box.Grow(1)
+					}
 				} else if column == 1 {
-					box.Width(62).TextEnd()
+					if resizable {
+						box.Width(columns.size).TextEnd()
+					} else {
+						box.Width(62).TextEnd()
+					}
 				} else {
-					box.Width(w.dateWidth(bounds.Width))
+					if resizable {
+						box.Width(columns.modified)
+					} else {
+						box.Width(w.dateWidth(bounds.Width))
+					}
 				}
 			}
 		})
@@ -586,7 +650,7 @@ func (w *sftpWindow) declarePane(c ui.C, s *sftpWindowScratch) {
 				folder.prepareSFTPList()
 				folder.seedSFTPListChoice()
 				s.list = ui.List(c, &folder.list, len(folder.rows), func(row ui.ListRow) {
-					w.declareListRow(row, sideIndex(local), bounds.Width, rowWidth)
+					w.declareListRow(row, side, bounds.Width, rowWidth, columns)
 				}).Grow(1).Label(m.SFTPFiles)
 				folder.seedSFTPListCurrent()
 				if folder.list.Changed() {
@@ -650,7 +714,7 @@ func (w *sftpWindow) declarePane(c ui.C, s *sftpWindowScratch) {
 // and, when the columns are on, its size and modification time. A selected row
 // is tinted, the pointer lightens one, and the keyboard's row is ringed. The
 // List owns the choice and the hover identity; the window only reads them.
-func (w *sftpWindow) declareListRow(row ui.ListRow, side int, paneWidth, rowWidth float32) {
+func (w *sftpWindow) declareListRow(row ui.ListRow, side int, paneWidth, rowWidth float32, columns sftpColumnMetrics) {
 	folder := w.folder(side == 0)
 	if row.Index < 0 || row.Index >= len(folder.rows) {
 		return
@@ -680,22 +744,46 @@ func (w *sftpWindow) declareListRow(row ui.ListRow, side int, paneWidth, rowWidt
 	if row.Focused() {
 		box = box.Border(1, pal.accent)
 	}
+	sizeWidth, modifiedWidth := float32(62), w.dateWidth(paneWidth)
+	resizable := w.owner.sftpColumnResizeAvailable()
+	if resizable {
+		sizeWidth, modifiedWidth = columns.size, columns.modified
+	}
 	box.Children(func() {
 		declareSFTPRowIcon(c, entry, tint)
-		ui.Text(c, entry.entry.Name).Color(color).Ellipsis().Grow(1)
+		name := ui.Text(c, entry.entry.Name).Color(color).Ellipsis().Grow(1)
+		// The row spends its padding, the icon and the gaps before the name text;
+		// a name wider than what is left is the one the tooltip is for.
+		available := rowWidth - 16 - sftpColumnIconWidth - 3*sftpColumnNameGap - sizeWidth - modifiedWidth
+		if !resizable {
+			available = rowWidth - 16 - sftpColumnIconWidth - sftpColumnNameGap
+			for _, column := range w.owner.sftpColumns.entries[1:] {
+				if column.Enabled {
+					available -= sftpColumnNameGap
+					if column.Key == sftpColumnSize {
+						available -= sizeWidth
+					} else if column.Key == sftpColumnModified {
+						available -= modifiedWidth
+					}
+				}
+			}
+		}
+		if available > 0 && c.Canvas().TextWidth(entry.entry.Name, metrics.FontSizeM) > available {
+			name = name.HitWith(row.ID, entry.entry.Name, gfx.HitOptions{Hint: entry.entry.Name, SkipFocus: true})
+		}
 		for _, column := range w.owner.sftpColumns.entries[1:] {
 			if !column.Enabled {
 				continue
 			}
 			if column.Key == sftpColumnSize {
-				ui.Text(c, entry.cells[2]).FontSize(metrics.FontSizeS).Color(pal.muted).Width(62).TextEnd()
+				ui.Text(c, entry.cells[2]).FontSize(metrics.FontSizeS).Color(pal.muted).Width(sizeWidth).TextEnd()
 			}
 			if column.Key == sftpColumnModified {
 				date := entry.cells[3]
 				if paneWidth < 420 && len(date) >= 16 {
 					date = date[5:10]
 				}
-				ui.Text(c, date).FontSize(metrics.FontSizeS).Color(pal.muted).Width(w.dateWidth(paneWidth))
+				ui.Text(c, date).FontSize(metrics.FontSizeS).Color(pal.muted).Width(modifiedWidth)
 			}
 		}
 	})
@@ -706,71 +794,6 @@ func (w *sftpWindow) dateWidth(width float32) float32 {
 		return 76
 	}
 	return 118
-}
-
-func (w *sftpWindow) queueCount() int {
-	count := 0
-	for i := range w.owner.transfers.entries {
-		e := &w.owner.transfers.entries[i]
-		if e.owner == w.view && !e.removed {
-			count++
-		}
-	}
-	return count
-}
-
-// declareQueue declares the transfer queue's cards in the window page. The
-// queue is scrolled by the window's own offset, so only the cards on screen are
-// declared.
-func (w *sftpWindow) declareQueue(c ui.C, bounds, origin gfx.Rect) {
-	state := w.owner
-	w.ui.queueBounds = gfx.Rect{X: bounds.X, Y: bounds.Y + 24, Width: bounds.Width, Height: max(bounds.Height-24, 0)}
-	w.ui.queueVisible = w.ui.queueVisible[:0]
-	for pass := 0; pass < 2; pass++ {
-		for i := len(state.transfers.entries) - 1; i >= 0; i-- {
-			e := &state.transfers.entries[i]
-			if e.owner != w.view || e.removed || (pass == 0) != transferActive(e.snapshot) {
-				continue
-			}
-			w.ui.queueVisible = append(w.ui.queueVisible, e)
-		}
-	}
-	w.ui.queueItems = len(w.ui.queueVisible)
-	if cap(w.ui.queueCards) < w.ui.queueItems {
-		w.ui.queueCards = make([]transferCard, w.ui.queueItems)
-	} else {
-		w.ui.queueCards = w.ui.queueCards[:w.ui.queueItems]
-		for index := range w.ui.queueCards {
-			w.ui.queueCards[index] = transferCard{}
-		}
-	}
-	maxOffset := max(float32(w.ui.queueItems)*transferCardHeight-w.ui.queueBounds.Height, 0)
-	w.ui.queueOffset = min(max(w.ui.queueOffset, 0), maxOffset)
-	row := 0
-	for _, e := range w.ui.queueVisible {
-		box := gfx.Rect{X: bounds.X, Y: w.ui.queueBounds.Y + float32(row)*transferCardHeight - w.ui.queueOffset, Width: bounds.Width - 12, Height: transferCardHeight - 8}
-		index := row
-		row++
-		if box.Y+box.Height < w.ui.queueBounds.Y || box.Y > w.ui.queueBounds.Y+w.ui.queueBounds.Height {
-			continue
-		}
-		card := &w.ui.queueCards[index]
-		*card = transferCard{entry: e}
-		container := ui.Column(c.KeyInt(e.id)).Absolute().
-			Left(box.X - origin.X).Top(box.Y - origin.Y).Width(box.Width).Height(box.Height)
-		container.HitWith(sftpWindowQueueRows.At(index), e.title, gfx.HitOptions{Role: gfx.RoleGroup, SkipFocus: true, Hint: e.paths})
-		state.declareTransferCard(c, container, e, card)
-	}
-}
-
-// paintQueueDetails paints the queue's header, scrollbar and the hand-painted
-// parts of its cards. The cards themselves are the page's.
-func (w *sftpWindow) paintQueueDetails(canvas *gfx.Canvas, bounds gfx.Rect) {
-	theme, m := w.owner.Theme(), w.owner.messages
-	canvas.Label(m.SFTPTransferQueue, gfx.Rect{X: bounds.X + 4, Y: bounds.Y, Width: bounds.Width - 8, Height: 20}, gfx.TextStyle{Size: theme.Metrics.FontSizeS, Weight: gfx.WeightSemibold, Color: theme.Foreground})
-	area := components.BeginScrollArea(canvas, theme, w.ui.queueBounds, gfx.Size{Height: float32(w.ui.queueItems) * transferCardHeight}).Offset(0, w.ui.queueOffset).VerticalScrollbar(hitSFTPWindowQueueBar, m.SFTPTransferQueue, "")
-	w.owner.paintTransferCardsFor(canvas, theme, w.ui.queueCards)
-	w.ui.queueBar = area.EndContent()
 }
 
 func (w *sftpWindow) paintMenu(canvas *gfx.Canvas) {
@@ -821,4 +844,27 @@ func (w *sftpWindow) paintDrag(canvas *gfx.Canvas) {
 		label, glyph = w.owner.messages.SFTPWindow.DropUploadHint, iconUpload
 	}
 	w.owner.paintSFTPTransferDrop(canvas, bounds, label, target, glyph)
+}
+
+// paintForeignDrag paints the pane another window's file drag would land in.
+func (w *sftpWindow) paintForeignDrag(canvas *gfx.Canvas) {
+	side := sideIndex(w.foreign.local)
+	if w.ui.list[side].Width <= 0 {
+		return
+	}
+	bounds := w.ui.list[side]
+	if w.foreign.row >= 0 {
+		bounds.Y += float32(w.foreign.row)*sftpRowHeight - w.ui.offset[side]
+		bounds.Height = sftpRowHeight
+	}
+	label, glyph := w.owner.messages.SFTPWindow.DropUploadHint, uint8(iconUpload)
+	switch {
+	case !w.foreign.fromLocal && w.foreign.local:
+		label, glyph = w.owner.messages.SFTPWindow.DropDownloadHint, iconDownload
+	case !w.foreign.fromLocal && !w.foreign.local:
+		label, glyph = w.owner.messages.SFTPWindow.DropCopyHint, iconCopy
+	}
+	canvas.Clip(w.ui.list[side])
+	defer canvas.Unclip()
+	w.owner.paintSFTPTransferDrop(canvas, bounds, label, w.foreign.target, glyph)
 }

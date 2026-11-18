@@ -11,6 +11,16 @@ In **Settings > Files**, the two directions are independent:
 - **Terminal follows file navigation** is off by default. Turn it on to also
   change the owning terminal's folder after entering a remote directory.
 
+The attached remote file panel also has **Go to this folder in the terminal**
+beside the follow button. It changes the owning terminal to the displayed folder
+once, independently of either follow preference. It validates the folder with a
+fresh directory read. Integrated shells use the same empty-prompt checks as
+reverse sync. An ordinary POSIX shell, including an **Interactive session only**
+connection, can also receive this explicit action at a recognized empty shell
+prompt. The prompt must stay unchanged during the directory read. This fallback
+does not enable automatic reverse sync. A skipped or canceled request is never
+retried automatically.
+
 Reverse sync requires a fresh successful directory read and an untouched,
 ready shell prompt belonging to the same session, with command-start reporting
 (Bash 4.4+ PS0, a DEBUG trap on older Bash, or Zsh preexec). It skips partial command
@@ -37,8 +47,9 @@ made before that reconnect inherit the same remembered directory.
 Only trusted prompt reports are remembered. A running program, a nested login,
 or a report that does not belong to this session's integration cannot change
 the next start directory. Native Windows SSH hosts are not POSIX shell targets,
-and disabling both integration directions keeps the ordinary shell startup, so
-neither remembers a remote directory in this way.
+and disabling both integration directions, setting **Command completions** to
+**Shortcut**, and leaving **Tab name** off **Current path** keeps the ordinary
+shell startup, so neither remembers a remote directory in this way.
 
 Local panes, standalone file windows and container command sessions do not
 control terminals. Refreshing a list or following a terminal report never sends
@@ -67,8 +78,9 @@ the last folder stay on this device rather than in synced settings.
 
 - Bash uses a private runtime rc file that sources `/etc/profile` and the first
   readable user login profile, then appends to the existing string or array
-  `PROMPT_COMMAND`. It runs interactively, but Bash's `login_shell` flag and
-  automatic `.bash_logout` processing differ from a true login shell.
+  `PROMPT_COMMAND`. `~/.bashrc` is reached only when that login profile sources
+  it, as in a login shell. It runs interactively, but Bash's `login_shell` flag
+  and automatic `.bash_logout` processing differ from a true login shell.
 - Zsh uses a private runtime ZDOTDIR, sources the user's startup files in order,
   restores ZDOTDIR, and adds a `precmd_functions` entry without replacing
   `precmd`. A `.zsh_history` default derived from the private directory is

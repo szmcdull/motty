@@ -32,6 +32,7 @@ var (
 	hitSFTPBookmarkDismiss = tree.ID(sftpHits, "sftp-bookmark-dismiss")
 	hitSFTPExtract         = tree.ID(sftpHits, "sftp-extract")
 	hitSFTPCompress        = tree.ID(sftpHits, "sftp-compress")
+	hitSFTPLocateTerminal  = tree.ID(sftpHits, "sftp-locate-terminal")
 	hitSFTPDialogField2    = tree.ID(sftpHits, "sftp-dialog-field2")
 )
 
@@ -85,6 +86,8 @@ func (state *State) clickSFTPExtra(session *Session, view *sftpView, id gfx.ID) 
 	switch {
 	case id == hitSFTPFollowToggle:
 		state.toggleSFTPFollow(session)
+	case id == hitSFTPLocateTerminal:
+		state.locateSFTPTerminal(view)
 	case id == hitSFTPPaneToggle:
 		state.toggleSFTPPane(view)
 	case id == hitSFTPDownloadHere && !view.busy:
@@ -569,6 +572,9 @@ func (state *State) restoreSFTPSettings(saved savedState) {
 	}
 	state.sftpColumns = restoreSFTPColumnPreferences(saved.SFTPColumns)
 	state.sftpDownloadDirectory = restoreSFTPDownloadDirectory(saved.SFTPDownloadDirectory)
+	if saved.SFTPTransferFilter >= transferFilterAll && saved.SFTPTransferFilter < transferFilterCount {
+		state.transfers.filter = saved.SFTPTransferFilter
+	}
 	state.sftpPanelSide = layoutcore.ContextLeft
 	if saved.SFTPPanelSide == "right" {
 		state.sftpPanelSide = layoutcore.ContextRight

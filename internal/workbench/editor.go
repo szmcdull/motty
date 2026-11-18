@@ -65,6 +65,9 @@ type hostEditor struct {
 	sshOptions   *sshconfig.ConnectionOptions
 	authOpen     bool
 	identityOpen bool
+	// identitiesOnly is the automatic-authentication switch that offers the
+	// ssh-agent only keys matching the configured identities.
+	identitiesOnly bool
 	// credential is the saved password the host takes its password from, and
 	// credentialOpen its list being open.
 	credential     string
@@ -76,6 +79,17 @@ type hostEditor struct {
 	algorithms       text.Editor
 	// loginCommand is the line typed into the host's shells after login.
 	loginCommand text.Editor
+	// idleKeepAlive is the Advanced section's inactivity probe: the chosen
+	// interval, its custom value and unit, and what the probe sends.
+	idleKeepAlive   idleKeepAlivePreset
+	idleInterval    text.Editor
+	idleUnit        idleIntervalUnit
+	idleInput       idleInputMode
+	idleInputChosen bool
+	idleInputCustom text.Editor
+	// The three lists the probe's selects open, and the interval field.
+	idleKeepAliveOpen, idleUnitOpen, idleInputOpen bool
+	remoteLogPaths                                 []remoteLogPath
 	// forwardX11 is the host's "Forward X11" switch.
 	forwardX11 bool
 	// agentForward is the host's "Forward ssh-agent" switch.
@@ -85,7 +99,8 @@ type hostEditor struct {
 	interactiveOnly bool
 	// agentAccess is the "Allow MCP agents to use this host" switch. It is not
 	// part of the host: it is kept for this computer (see savedState.AgentHosts).
-	agentAccess bool
+	agentAccess        bool
+	agentAccessChanged bool
 	// noHistory is the host's "Don't record commands" switch.
 	noHistory bool
 	// proxy is nil to inherit the global proxy, ProxyNone to force a direct
@@ -135,6 +150,8 @@ const (
 	fieldOTP
 	fieldPassphrase
 	fieldLoginCommand
+	fieldIdleInterval
+	fieldIdleInputCustom
 	fieldCount
 )
 
@@ -163,6 +180,10 @@ func (editor *hostEditor) field(field hostField) *text.Editor {
 		return &editor.passphrase
 	case fieldLoginCommand:
 		return &editor.loginCommand
+	case fieldIdleInterval:
+		return &editor.idleInterval
+	case fieldIdleInputCustom:
+		return &editor.idleInputCustom
 	default:
 		return &editor.port
 	}
@@ -199,8 +220,14 @@ func (editor *hostEditor) portNumber() (uint16, bool) {
 // the same name as an existing one (see sameHost): the same machine under another
 // account, or reached through a bastion under another name, is a different host.
 func (editor *hostEditor) validate(hosts []Host, ignoreID uint32, messages i18n.Messages) string {
-	if editor.value(fieldLabel) == "" || editor.value(fieldAddress) == "" {
+	if editor.value(fieldLabel) == "" {
 		return messages.ErrLabelRequired
+	}
+	if editor.value(fieldAddress) == "" {
+		if editor.protocol == protocolSerial {
+			return messages.ErrDeviceRequired
+		}
+		return messages.ErrAddressRequired
 	}
 	if editor.protocol == protocolSerial {
 		if !validEndpoint(protocolSerial, editor.value(fieldAddress)) {
@@ -251,6 +278,20 @@ func (editor *hostEditor) validate(hosts []Host, ignoreID uint32, messages i18n.
 		editor.advancedOpen = true
 		return messages.Tools.ErrMoshInteractive
 	}
+	if idleKeepAliveProtocol(editor.protocol) {
+		if _, ok := editor.idleKeepAliveDuration(); !ok {
+			editor.advancedOpen = true
+			return messages.Tools.ErrIdleKeepAliveInterval
+		} else if editor.idleInputValue() == idleInputCustom {
+			// The payload is saved whether or not the probe is on, so it is
+			// validated the same way: text the next load would drop must not be
+			// saved just because the interval is off.
+			if _, err := parseIdleEscapes(editor.value(fieldIdleInputCustom)); err != nil {
+				editor.advancedOpen = true
+				return messages.Tools.ErrIdleKeepAliveInput
+			}
+		}
+	}
 	if _, ok := parseHostTags(editor.value(fieldTags)); !ok {
 		return messages.ErrHostTagsInvalid
 	}
@@ -267,6 +308,7 @@ func (editor *hostEditor) validate(hosts []Host, ignoreID uint32, messages i18n.
 }
 
 func (editor *hostEditor) load(host Host) {
+	editor.agentAccessChanged = false
 	editor.form = hostFormScroll{}
 	editor.colorPicker = hostColorPicker{}
 	editor.color = text.Editor{}
@@ -287,10 +329,13 @@ func (editor *hostEditor) load(host Host) {
 	editor.algorithms = text.Editor{}
 	editor.loginCommand = text.Editor{}
 	editor.loginCommand.Insert(host.LoginCommand)
+	editor.loadIdleKeepAlive(host)
+	editor.remoteLogPaths = host.RemoteLogPaths
 	editor.otp, editor.otpSaved, editor.otpRemove = text.Editor{}, false, false
 	editor.algoMode = host.algoMode()
 	editor.auth, editor.identity, editor.credential = host.Auth, host.Identity, host.Credential
 	editor.sshOptions = host.SSHOptions.Clone()
+	editor.identitiesOnly = host.IdentitiesOnly
 	editor.authOpen, editor.identityOpen, editor.credentialOpen = false, false, false
 	editor.forwardX11 = host.ForwardX11
 	editor.agentForward = host.AgentForward
@@ -298,7 +343,10 @@ func (editor *hostEditor) load(host Host) {
 	editor.noHistory = host.NoHistory
 	editor.proxy, editor.proxyPassword = cloneOutboundProxy(host.Proxy), ""
 	editor.transfer = host.Transfer
-	editor.advancedOpen = host.isSSH() && (host.Algo != nil || host.ForwardX11 || host.AgentForward || host.InteractiveOnly || host.NoHistory || host.LoginCommand != "")
+	editor.advancedOpen = host.isSSH() && (host.Algo != nil || host.ForwardX11 || host.AgentForward || host.InteractiveOnly || host.NoHistory || host.IdentitiesOnly || host.LoginCommand != "")
+	if idleKeepAliveProtocol(host.Protocol) && (host.IdleKeepAlive > 0 || host.IdleInput != idleInputProtocolDefault) {
+		editor.advancedOpen = true
+	}
 	if host.Algo != nil {
 		editor.algorithms.Insert(host.Algo.list)
 	}
@@ -351,6 +399,7 @@ func (editor *hostEditor) host(id uint32) Host {
 	if editor.protocol == protocolSSH {
 		host.SSHOptions = editor.sshOptions.Clone()
 		host.Auth, host.Identity = editor.auth, editor.identity
+		host.IdentitiesOnly = editor.identitiesOnly
 		host.Terminal = editor.terminal
 		if host.Auth != authPrivateKey {
 			host.Identity = ""
@@ -360,6 +409,7 @@ func (editor *hostEditor) host(id uint32) Host {
 		host.InteractiveOnly = editor.interactiveOnly
 		host.NoHistory = editor.noHistory
 		host.LoginCommand = editor.value(fieldLoginCommand)
+		host.RemoteLogPaths = editor.remoteLogPaths
 		host.Transfer = editor.transfer
 		switch editor.algoMode {
 		case algoCompatible:
@@ -371,9 +421,16 @@ func (editor *hostEditor) host(id uint32) Host {
 	if editor.protocol != protocolSerial {
 		host.Proxy = cloneOutboundProxy(editor.proxy)
 	}
+	if idleKeepAliveProtocol(editor.protocol) {
+		host.IdleKeepAlive, _ = editor.idleKeepAliveDuration()
+		host.IdleInput = editor.idleInputModeForSave()
+		if host.IdleInput == idleInputCustom {
+			host.IdleInputCustom = editor.value(fieldIdleInputCustom)
+		}
+	}
 	// Only a host that signs in with a password has one to take from a saved one.
 	if editor.protocol == protocolVNC || editor.protocol == protocolRDP ||
-		editor.protocol == protocolSSH && editor.auth != authPrivateKey && editor.auth != authAgent {
+		editor.protocol == protocolSSH && editor.auth.usesPassword() {
 		host.Credential = editor.credential
 	}
 	host.normalizeEndpoint()
@@ -402,12 +459,16 @@ func (editor *hostEditor) reset() {
 	editor.port = text.Editor{}
 	editor.algorithms = text.Editor{}
 	editor.loginCommand = text.Editor{}
+	editor.resetIdleKeepAlive()
+	editor.remoteLogPaths = nil
 	editor.otp, editor.otpSaved, editor.otpRemove = text.Editor{}, false, false
 	editor.algoMode, editor.auth, editor.identity, editor.credential = algoDefault, authAutomatic, "", ""
 	editor.sshOptions = nil
+	editor.identitiesOnly = false
 	editor.authOpen, editor.identityOpen, editor.credentialOpen = false, false, false
 	editor.forwardX11, editor.agentForward, editor.noHistory, editor.transfer = false, false, false, transferAuto
 	editor.agentAccess = false
+	editor.agentAccessChanged = false
 	editor.proxy, editor.proxyPassword = nil, ""
 	editor.advancedOpen = false
 	editor.port.Insert(strconv.Itoa(defaultPort))
@@ -489,6 +550,7 @@ func (editor *hostEditor) applyProtocol(previous hostProtocol) {
 		}
 	}
 	editor.authOpen, editor.identityOpen, editor.credentialOpen = false, false, false
+	editor.idleKeepAliveOpen, editor.idleUnitOpen, editor.idleInputOpen = false, false, false
 	if protocol == protocolSerial {
 		editor.ports = serial.Ports()
 		if editor.value(fieldAddress) == "" && len(editor.ports) > 0 {

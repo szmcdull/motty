@@ -96,6 +96,20 @@ func TestTheListStillOpensWhileTypingInANestedShell(t *testing.T) {
 	waitCompletionList(t, w)
 }
 
+// su, sudo -i and ssh ask for a password before the child shell starts, so the
+// child's prompt sits directly below the question. That row is not part of the
+// new prompt and must not hide it (#799).
+func TestTheListOpensInANestedShellEnteredThroughAPasswordPrompt(t *testing.T) {
+	w := newCompletionWorld(t)
+	w.state.history.inlineOff = true // automatic-list mode
+	w.type_("su - root\r")
+	w.shell.say("密码： ")
+	w.shell.say("\r\n[root@host ~]# ")
+	w.state.Wake()
+	w.type_("git s")
+	waitCompletionList(t, w)
+}
+
 // Accepting in a nested shell still revalidates the line and types only the
 // suffix: the input guard is unavailable there, but the recorder's proof is not.
 func TestNestedShellAcceptanceTypesOnlyTheSuffix(t *testing.T) {
@@ -430,6 +444,31 @@ func TestCompletionGhostUsesTheCatalogOnlyWhenUnique(t *testing.T) {
 	if _, ok := other.state.commandGhost(other.session); ok {
 		t.Fatal("an ambiguous prefix offered a ghost")
 	}
+}
+
+// docker compose is a CLI plugin, so the catalog imports it as its own
+// docker-compose root; it must still be reachable below docker, including the
+// ghost that is the only offer in inline mode (#857).
+func TestCompletionReachesPluginSubcommands(t *testing.T) {
+	w := newCompletionWorld(t)
+	w.type_("docker comp")
+	rest, ok := w.state.commandGhost(w.session)
+	if !ok || rest != "ose" {
+		t.Fatalf("ghost %q ok=%v", rest, ok)
+	}
+
+	w.type_("ose up --de")
+	w.state.openCompletions()
+	list := &w.state.completion.list
+	if !list.active {
+		t.Fatal("no list for docker compose up")
+	}
+	for _, candidate := range list.candidates {
+		if candidate.Text == "--detach" {
+			return
+		}
+	}
+	t.Fatalf("docker compose up --de = %+v", list.candidates)
 }
 
 func TestCompletionHistoryMergesFirstOnlyWhileLearning(t *testing.T) {

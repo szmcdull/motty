@@ -70,7 +70,14 @@ func (w *sftpWindow) connect() {
 }
 
 func (state *State) raiseSFTPAuthentication(session *Session) {
-	if w := state.sftpWindows[session.ID]; w != nil && w.ownsConnection && !w.closed && state.options.Raise != nil {
+	if state.options.Raise == nil {
+		return
+	}
+	if w := state.sftpWindows[session.ID]; w != nil && w.ownsConnection && !w.closed {
+		state.options.Raise()
+		return
+	}
+	if state.dedicatedFileSession(session.ID) != nil {
 		state.options.Raise()
 	}
 }
@@ -111,6 +118,11 @@ func (w *sftpWindow) releaseConnection() {
 	if !w.closed {
 		return
 	}
+	// A server-to-server copy that started here still reads through this
+	// connection. Its last transfer releases the connection when it settles.
+	if len(w.view.outgoingCopies) > 0 {
+		return
+	}
 	if w.ownsConnection {
 		for _, d := range w.owner.fileWindows.documents {
 			if d.origin == w && !d.local && !d.closed {
@@ -149,6 +161,13 @@ func (state *State) connectionSessions() func(func(*Session) bool) {
 		for i := range state.sessions {
 			if !yield(&state.sessions[i]) {
 				return
+			}
+			// A file panel's own connection asks through the same prompts as
+			// every other connection.
+			if files := state.sessions[i].files; files != nil && files.dedicated != nil && !files.dedicated.ready {
+				if !yield(&files.dedicated.session) {
+					return
+				}
 			}
 		}
 		for _, tunnel := range state.forwardTunnels {
